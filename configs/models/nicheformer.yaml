@@ -1,0 +1,23 @@
+# Nicheformer model configuration
+model_name: nicheformer
+dim_model: 512
+nheads: 8
+dim_feedforward: 2048
+nlayers: 6
+dropout: 0.1
+subset: "nf_1000donors"  # Options: "nf_1000donors", "nf_2000donors", "nf_4000donors"
+
+# Additional nicheformer parameters
+batch_first: true
+masking_p: 0.15
+n_tokens: 25000
+context_length: 1000
+warmup: 2000
+autoregressive: false
+pool: "mean"
+supervised_task: null
+learnable_pe: true
+specie: "human"
+assay: "10x"
+modality: "rna"
+contrastive: false

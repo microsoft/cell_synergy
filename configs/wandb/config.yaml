@@ -1,0 +1,5 @@
+group: "nicheformer"  # Can be overridden based on subset
+project: data-scaling
+entity: till-richter  # Set your entity name
+mode: online  # 'online', 'offline', or 'disabled'
+name: ""  # Default, can be overridden

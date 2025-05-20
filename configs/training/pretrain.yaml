@@ -1,0 +1,7 @@
+batch_size: 32
+num_workers: 0
+max_epochs: 100
+early_stopping_patience: 10
+learning_rate: 1e-4
+weight_decay: 1e-5
+accumulate_grad_batches: 10

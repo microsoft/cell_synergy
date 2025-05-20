@@ -1,0 +1,9 @@
+defaults:
+  - _self_
+  - models: nicheformer
+  - training: pretrain
+  - wandb: config
+  
+experiment:
+  seed: 42
+  name: "nicheformer_training"

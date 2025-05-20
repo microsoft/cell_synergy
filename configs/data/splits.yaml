@@ -1,0 +1,24 @@
+multimodal:
+  pretrain:
+    S: ['VUILD106', 'VUILD107MF']
+    M: ['VUILD106', 'VUILD107MF', 'VUILD115', 'THD0008']
+    L: ['VUILD106', 'VUILD107MF', 'VUILD115', 'THD0008', 'VUILD110', 'TILD117MF', 'VUILD96MF', 'VUILD78MF']
+  finetune:
+    S: ['VUILD102LF', 'TILD175']
+    M: ['VUILD102LF', 'TILD175', 'VUILD96LF', 'VUILD104LF']
+    L: ['VUILD102LF', 'TILD175', 'VUILD96LF', 'VUILD104LF', 'VUILD48MF', 'TILD117LF', 'VUILD78LF', 'VUHD116B']
+  test: ['THD0011', 'VUILD91LF', 'VUHD069', 'VUILD105MF', 'VUHD113', 'VUHD116A', 'VUHD095']
+
+
+gex_pretrain:
+  1000_donors: 'nf_1000donors'
+  2000_donors: 'nf_2000donors'
+  4000_donors: 'nf_4000donors'
+  full: 'nf_full'
+
+img_pretrain:
+  500K: 'bioptimus/H-optimus-0'
+  3M: 'paige-ai/Virchow2'
+  100M: 'MahmoodLab/UNI'
+  200M: 'MahmoodLab/UNI2-h'
+  1B: 'prov-gigapath/prov-gigapath'
