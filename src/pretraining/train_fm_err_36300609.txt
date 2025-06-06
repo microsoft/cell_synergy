@@ -1,9 +1,0 @@
-
-EnvironmentNameNotFound: Could not find conda environment: nicheformer
-You can list all discoverable environments with `conda info --envs`.
-
-
-Traceback (most recent call last):
-  File "/ictstr01/home/icb/till.richter/git/data_scaling/src/pretraining/train_nicheformer.py", line 7, in <module>
-    import hydra
-ModuleNotFoundError: No module named 'hydra'

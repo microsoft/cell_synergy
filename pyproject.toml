@@ -28,6 +28,7 @@ dependencies = [
     "torchvision>=0.15.0",
     "transformers>=4.30.0",
     "wandb>=0.15.0",
+    "nicheformer @ file:///workspace/nicheformer"
 ]
 
 [project.optional-dependencies]
