@@ -390,7 +390,7 @@ def main():
     args = parse_args()
     
     # Load configuration using the new config system
-    cfg = load_data_splits()
+    cfg = load_data_splits(dataset_name="lung")
     
     logger.info(f"Using PROJECT_DIR: {PROJECT_DIR}")
     logger.info(f"Embeddings will be saved to: {UNI_EMBEDDINGS_DIR / 'img'}")

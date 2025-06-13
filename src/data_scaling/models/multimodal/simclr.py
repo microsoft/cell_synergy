@@ -2,16 +2,13 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-class CLIPBaseline(nn.Module):
+class SimCLRBaseline(nn.Module):
     def __init__(
         self,
-        img_embed_dim: int = 1024,
-        gex_embed_dim: int = 128,
-        projection_dim: int = 256,
-        temperature: float = 0.07
+        cfg,
     ):
         """
-        CLIP baseline model for multimodal learning.
+        SimCLR baseline model for multimodal learning.
         
         Args:
             img_embed_dim: Dimension of image embeddings (default: 1024 from UNIViT)
@@ -20,6 +17,11 @@ class CLIPBaseline(nn.Module):
             temperature: Temperature parameter for contrastive loss
         """
         super().__init__()
+
+        img_embed_dim = cfg.models.img_embed_dim
+        gex_embed_dim = cfg.models.gex_embed_dim
+        projection_dim = cfg.models.projection_dim
+        temperature = cfg.models.temperature
         
         # Projection heads
         self.img_projection = nn.Sequential(
@@ -52,7 +54,7 @@ class CLIPBaseline(nn.Module):
         
     def compute_loss(self, img_embed, gex_embed):
         """
-        Compute CLIP contrastive loss.
+        Compute SimCLR contrastive loss.
         For paired data, use the diagonal elements as positive pairs.
         """
         batch_size = img_embed.shape[0]

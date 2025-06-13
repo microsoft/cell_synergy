@@ -37,7 +37,7 @@ def get_config(config_path: Optional[str] = None) -> DictConfig:
     return cfg
 
 
-def load_data_splits():
+def load_data_splits(dataset_name: str):
     """
     Load data splits configuration.
     
@@ -45,5 +45,5 @@ def load_data_splits():
         DictConfig: Configuration containing data splits
     """
     # Load the splits.yaml config specifically
-    splits_path = CONFIG_DIR / "data" / "splits.yaml"
+    splits_path = CONFIG_DIR / "data" / f"{dataset_name}.yaml"
     return OmegaConf.load(splits_path) 

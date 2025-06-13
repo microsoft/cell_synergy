@@ -1,3 +1,0 @@
-embedding_dim: 512
-temperature: 0.07
-projection_dim: 256 

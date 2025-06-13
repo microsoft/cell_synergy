@@ -168,8 +168,8 @@ cython_debug/
 # Aider stuff
 .aider*
 
-project_folder/
-original_data/
+project_folder
+original_data
 notebooks/
 data_scaling.egg-info/
 *.parquet
@@ -180,5 +180,5 @@ data_scaling.egg-info/
 *.jsonl.gz.part
 *.jsonl.gz.part.
 *.wandb
-src/pretraining/wandb/
-rc/pretraining/outputs/
+pyproject.toml
+src/data_scaling/paths.py

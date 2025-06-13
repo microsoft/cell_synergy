@@ -3,18 +3,17 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class BarlowTwinsBaseline(nn.Module):
-    def __init__(
-        self,
-        img_embed_dim: int = 1024,
-        gex_embed_dim: int = 128,
-        projection_dim: int = 256,
-        lambd: float = 0.0051
-    ):
+    def __init__(self, cfg):
         """
         Barlow Twins-style model for multimodal embeddings.
+        Accepts a Hydra config (cfg) for all hyperparameters.
         """
         super().__init__()
-        self.lambd = lambd
+        # Read from config, fallback to defaults if not present
+        img_embed_dim = cfg.models.img_embed_dim
+        gex_embed_dim = cfg.models.gex_embed_dim
+        projection_dim = cfg.models.projection_dim
+        self.lambd = cfg.models.lambda_param
 
         # Project to shared space
         self.img_proj = nn.Sequential(
@@ -54,4 +53,4 @@ class BarlowTwinsBaseline(nn.Module):
     def get_embeddings(self, img_embed, gex_embed):
         z1 = F.normalize(self.img_proj(img_embed), dim=-1)
         z2 = F.normalize(self.gex_proj(gex_embed), dim=-1)
-        return z1, z2
+        return z1, z2 

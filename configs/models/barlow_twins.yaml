@@ -1,0 +1,8 @@
+method: "barlow_twins"
+gex_encoder: "S"
+img_encoder: "S"
+projection_dim: 256
+lambda_param: 0.0051
+scale_loss: 0.025 
+img_embed_dim: 1536
+gex_embed_dim: 128

@@ -1,0 +1,12 @@
+method: "comm"
+gex_encoder: "S"
+img_encoder: "S"
+projection_dim: 256
+embed_dim: 256  # Common embedding dimension for fusion
+n_heads: 8      # Number of attention heads
+n_layers: 1     # Number of transformer layers
+fusion: "concat" # Fusion strategy (concat or x-attn)
+pool: "cls"     # Pooling strategy (cls or mean)
+img_embed_dim: 1536
+gex_embed_dim: 128
+temperature: 0.07

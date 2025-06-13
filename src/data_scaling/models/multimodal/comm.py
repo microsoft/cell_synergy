@@ -1,64 +1,80 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from comm.models.mmfusion import MMFusion  # Assuming CoMM is installed or in PYTHONPATH
+from comm.models.mmfusion import MMFusion
+
+class SimpleAdapter(nn.Module):
+    """Simple adapter to convert embeddings to tokens."""
+    def __init__(self, in_dim: int, out_dim: int):
+        super().__init__()
+        self.proj = nn.Linear(in_dim, out_dim)
+    
+    def forward(self, x):
+        # If input is [batch, dim], add sequence dimension
+        if x.ndim == 2:
+            x = x.unsqueeze(1)  # [batch, 1, dim]
+        return self.proj(x)
 
 class CoMMBaseline(nn.Module):
-    def __init__(
-        self,
-        img_embed_dim: int = 1024,
-        gex_embed_dim: int = 128,
-        fusion_dim: int = 256,
-        temperature: float = 0.07
-    ):
+    def __init__(self, cfg):
         """
         CoMM-based multimodal model using MMFusion for modality fusion.
+        Works with pre-computed embeddings from image and gene expression data.
         """
         super().__init__()
-
-        # Project to common dimension
-        self.img_proj = nn.Linear(img_embed_dim, fusion_dim)
-        self.gex_proj = nn.Linear(gex_embed_dim, fusion_dim)
-
-        # CoMM fusion module
+        
+        # Read dimensions from config
+        img_embed_dim = cfg.models.img_embed_dim
+        gex_embed_dim = cfg.models.gex_embed_dim
+        embed_dim = cfg.models.embed_dim
+        
+        # Create dummy encoders that just return the input (since we already have embeddings)
+        self.img_encoder = nn.Identity()
+        self.gex_encoder = nn.Identity()
+        
+        # Create input adapters to convert embeddings to tokens
+        self.img_adapter = SimpleAdapter(img_embed_dim, embed_dim)
+        self.gex_adapter = SimpleAdapter(gex_embed_dim, embed_dim)
+        
+        # Initialize MMFusion
         self.fusion = MMFusion(
-            input_dims=[fusion_dim, fusion_dim],
-            fusion_type='transformer',  # or 'mlp' depending on your needs
-            output_dim=fusion_dim
+            encoders=[self.img_encoder, self.gex_encoder],
+            input_adapters=[self.img_adapter, self.gex_adapter],
+            embed_dim=embed_dim,
+            fusion=cfg.models.fusion,
+            pool=cfg.models.pool,
+            n_heads=cfg.models.n_heads,
+            n_layers=cfg.models.n_layers
         )
 
-        self.temperature = temperature
-
     def forward(self, img_embed, gex_embed):
-        # Project embeddings
-        img_proj = self.img_proj(img_embed)
-        gex_proj = self.gex_proj(gex_embed)
-
-        # Fuse modalities
-        fused = self.fusion([img_proj, gex_proj])
-
-        # Normalize for contrastive similarity
+        # Pass through fusion model
+        fused = self.fusion([img_embed, gex_embed])
+        
+        # Normalize embeddings for contrastive learning
         fused = F.normalize(fused, dim=-1)
         return fused
 
     def compute_loss(self, img_embed, gex_embed):
         """
-        Contrastive loss using fused embeddings.
+        Compute contrastive loss between the fused embeddings.
         """
         batch_size = img_embed.shape[0]
         fused = self.forward(img_embed, gex_embed)
-
-        # Assume symmetric contrastive loss (like CLIP)
-        logits = torch.matmul(fused, fused.T) / self.temperature
-        labels = torch.eye(batch_size, device=logits.device)
-
-        loss_i2t = F.cross_entropy(logits, labels)
-        loss_t2i = F.cross_entropy(logits.T, labels.T)
-
-        return (loss_i2t + loss_t2i) / 2
+        
+        # Compute similarity matrix
+        sim_matrix = torch.matmul(fused, fused.T)
+        
+        # Create labels (diagonal is positive pairs)
+        labels = torch.arange(batch_size, device=fused.device)
+        
+        # Compute cross entropy loss in both directions
+        loss = F.cross_entropy(sim_matrix, labels)
+        
+        return loss
 
     def get_embeddings(self, img_embed, gex_embed):
         """
         Return fused embeddings in shared space.
         """
-        return self.forward(img_embed, gex_embed)
+        return self.forward(img_embed, gex_embed) 

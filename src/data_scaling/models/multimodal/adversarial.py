@@ -10,10 +10,6 @@ import torch.optim as optim
 
 import wandb
 
-# TODO lambda2
-# TODO: Adjust lambda_align based on importance
-# TODO: Assign each generator its own optimizer
-
 class SharedLayer(nn.Module):
     """Shared layer for encoder and decoder"""
     def __init__(self, input_dim, output_dim):
@@ -96,10 +92,10 @@ class DeepAE(nn.Module):
         output = self.decoder(latent)
         return output, latent
 
-class MultimodalGAN:
+class AdversarialBaseline:
     def __init__(
         self, 
-        config: Dict[str, Any], 
+        cfg,
     ):
         """
         Initialize MultimodalGAN with gene expression and image encoders.
@@ -109,17 +105,17 @@ class MultimodalGAN:
         """
         # Add a flag to track training stage
         self.training_stage = 1
-        self.config = config
+        self.config = cfg
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         
         # Flag to enable periodic saving
-        self.periodic_saving = config.get('periodic_saving', False)
+        self.periodic_saving = cfg.get('periodic_saving', False)
 
         # Set latent dimensions
         # img_latent_dim defaults to UNIViT embedding dimension (1024)
         # gex_latent_dim defaults to GCN_1 embedding dimension (128)
-        self.latent_dim_img = self.config.get("img_latent_dim", 1024)
-        self.latent_dim_gex = self.config.get("gex_latent_dim", 128)
+        self.latent_dim_img = cfg.get("img_latent_dim", 1024)
+        self.latent_dim_gex = cfg.get("gex_latent_dim", 128)
         self.latent_dim = min(self.latent_dim_img, self.latent_dim_gex)
 
         # Projection layers to align latent dimensions

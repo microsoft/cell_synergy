@@ -1,0 +1,8 @@
+method: "adversarial"
+gex_encoder: "S"
+img_encoder: "S"
+projection_dim: 256
+discriminator_hidden_dim: 512
+adv_loss_weight: 1.0 
+img_embed_dim: 1536
+gex_embed_dim: 128

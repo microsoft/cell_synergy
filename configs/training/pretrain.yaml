@@ -1,11 +1,4 @@
-batch_size: 128
-num_workers: 4  # Changed from 0
 max_epochs: 100
-early_stopping_patience: 10
-learning_rate: 7e-4
-weight_decay: 1e-5
-accumulate_grad_batches: 1  # Reduced with larger batch size and GPU count
-optimizer: adamw
-gradient_clip_val: 1.0
-num_nodes: 4
-use_deepspeed: true
+batch_size: 64
+learning_rate: 1e-3
+warmup_epochs: 5 

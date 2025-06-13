@@ -3,19 +3,15 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class VICRegBaseline(nn.Module):
-    def __init__(
-        self,
-        img_embed_dim=1024,
-        gex_embed_dim=128,
-        projection_dim=256,
-        sim_coeff=25.0,
-        std_coeff=25.0,
-        cov_coeff=1.0
-    ):
+    def __init__(self, cfg):
         super().__init__()
-        self.sim_coeff = sim_coeff
-        self.std_coeff = std_coeff
-        self.cov_coeff = cov_coeff
+        # Read from config, fallback to defaults if not present
+        img_embed_dim = cfg.models.img_embed_dim
+        gex_embed_dim = cfg.models.gex_embed_dim
+        projection_dim = cfg.models.projection_dim
+        self.sim_coeff = cfg.models.sim_coeff
+        self.std_coeff = cfg.models.std_coeff
+        self.cov_coeff = cfg.models.cov_coeff
         self.projection_dim = projection_dim
 
         self.img_proj = nn.Sequential(
@@ -62,4 +58,4 @@ class VICRegBaseline(nn.Module):
     def get_embeddings(self, img_embed, gex_embed):
         x = F.normalize(self.img_proj(img_embed), dim=-1)
         y = F.normalize(self.gex_proj(gex_embed), dim=-1)
-        return x, y
+        return x, y 

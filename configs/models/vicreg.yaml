@@ -1,0 +1,9 @@
+method: "vicreg"
+gex_encoder: "S"
+img_encoder: "S"
+projection_dim: 256
+sim_coeff: 25.0
+std_coeff: 25.0
+cov_coeff: 1.0 
+img_embed_dim: 1536
+gex_embed_dim: 128
