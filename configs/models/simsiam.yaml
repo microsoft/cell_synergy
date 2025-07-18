@@ -1,0 +1,10 @@
+method: "simsiam"
+img_embed_dim: 1024
+gex_embed_dim: 128
+projection_dim: 256
+hidden_dims: [512, 256]
+dropout: 0.1
+use_batchnorm: true
+projection_hidden_dim: 512
+pred_dim: 128
+checkpoint_path: "trained_models/simsiam/best_simsiam_lr0.0001_wd0.0001-epoch=51-val_loss=-1.0000.ckpt"

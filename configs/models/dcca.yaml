@@ -1,0 +1,11 @@
+method: "dcca"            # Method name for the model
+img_embed_dim: 1024         # Input dimension for image embeddings
+gex_embed_dim: 128          # Input dimension for gene expression embeddings
+projection_dim: 256         # Output dimension of the shared latent space
+hidden_dims: [512, 256]     # Hidden layers for each modality's encoder
+dropout: 0.1                # Dropout rate
+use_batchnorm: true         # Whether to use batch normalization
+activation: "sigmoid"       # Activation function for the encoder
+use_all_singular_values: false  # Whether to use all singular values in DCCA
+projection_hidden_dim: 512
+checkpoint_path: "trained_models/dcca/best_dcca_lr0.005_wd0.0001-epoch=109-val_loss=-3229.2458-v1.ckpt"

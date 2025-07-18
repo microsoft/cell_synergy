@@ -7,11 +7,23 @@ nlayers: 12
 dropout: 0.0
 subset: "nf_1000donors"  # Options: "nf_1000donors", "nf_2000donors", "nf_4000donors"
 
+# Known checkpoint to WandB ID mappings
+pretrain_checkpoint_registry:
+  "nf_1000donors":
+    checkpoint_dir: "nf_1000donorslr0_0008_wd1e-06"
+    wandb_id: "<id>"
+  "nf_2000donors":
+    checkpoint_dir: "nf_2000donorslr0_0005_wd5e-07"
+    wandb_id: "<id>"
+  "nf_4000donors":
+    checkpoint_dir: "nf_4000donorslr0_0006_wd3e-07"
+    wandb_id: "<id>"
+
 # Additional nicheformer parameters
 batch_first: true
 masking_p: 0.15
 n_tokens: 20340
-context_length: 1500
+context_length: 1500  # Match pre-trained model's context length
 warmup: 100000
 autoregressive: false
 pool: null

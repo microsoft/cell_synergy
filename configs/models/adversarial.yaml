@@ -6,3 +6,25 @@ discriminator_hidden_dim: 512
 adv_loss_weight: 1.0 
 img_embed_dim: 1536
 gex_embed_dim: 128
+
+# Hyperparameters from original multimodal-ssl implementation
+lambda1: 1.0  # Reconstruction loss weight
+lambda3: 0.5  # Adversarial loss weight
+lambda_align: 0.1  # Latent alignment loss weight
+
+# GAN type and clipping (for Wasserstein GAN)
+gan_type: "standard"  # "standard" or "wasserstein"
+clip_value: 0.01  # Weight clipping value for Wasserstein GAN
+
+# Optimizer hyperparameters (from original implementation)
+lr_g: 1e-4  # Generator learning rate
+lr_d: 5e-5  # Discriminator learning rate
+weight_decay: 1e-4  # Weight decay
+b1: 0.5  # Adam beta1
+b2: 0.999  # Adam beta2
+
+# Training parameters
+periodic_saving: false
+save_freq: 50
+task_type: "classification"  # Used in original for paired sample handling
+checkpoint_path: "trained_models/adversarial/best_adversarial_lr0.005_wd1e-05-epoch=497-val_loss=-60162.9102.ckpt"

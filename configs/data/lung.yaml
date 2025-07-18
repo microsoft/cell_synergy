@@ -1,4 +1,12 @@
 dataset: "lung"
+dataset_name: "lung"
+
+# HuggingFace dataset configuration
+hf_datasets:
+  # For alignment training (pre-computed embeddings)
+  alignment: "microsoft/multimodal_img_st"
+  # For other tasks (original dataset)
+  original: "theislab-multimodal-ssl/paired-image-gexp-xenium-lungmed55-broadCT6"
 
 multimodal:
   pretrain:
@@ -27,9 +35,18 @@ img_pretrain:
 pretrain_split: "S"
 finetune_split: "S"
 test_split: "test"
+stage: "pretrain"  # pretrain, finetune, or test
 gex_pretrain_choice: "full"
 img_pretrain_choice: "200M"
+
+# HuggingFace dataset paths for alignment training
 hf_dataset_paths:
-  S: "lung_hf_S"
-  M: "lung_hf_M"
-  L: "lung_hf_L"
+  S: "lung_hf"
+  M: "lung_hf"  
+  L: "lung_hf"
+
+part_size: 256
+buffer_size: 4000000
+parts_per_chunk: 4
+prealloc_gpu_memory: True
+num_workers: 8

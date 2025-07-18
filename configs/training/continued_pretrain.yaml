@@ -1,0 +1,16 @@
+batch_size: 128
+num_workers: 4
+max_epochs: 50  # Reduced for continued training
+early_stopping_patience: 10
+learning_rate: 7e-4
+continued_lr: 3.5e-4  # Half of original learning rate for continued training
+weight_decay: 1e-5
+accumulate_grad_batches: 1
+optimizer: adamw
+gradient_clip_val: 1.0
+num_nodes: 4
+seed: 42
+val_ratio: 0.2  # Added validation ratio
+log_every_n_steps: 100
+val_check_interval: 1
+precision: "bf16-mixed"

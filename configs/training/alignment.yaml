@@ -1,0 +1,9 @@
+batch_size: 2048
+num_workers: 4  # Reduced: better for small datasets, avoid overhead
+max_epochs: 500
+early_stopping_patience: 30
+learning_rate: 1e-3  # Fixed: matches multimodal-ssl (was 1e-4)
+weight_decay: 1e-5
+gradient_clip_val: 1.0  # Added: prevent gradient explosion in adversarial training
+val_check_interval: 1.0  # Changed: validate every epoch (was 100 steps) - adaptive in code
+seed: 42

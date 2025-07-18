@@ -2,60 +2,66 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+class VICRegEncoder(nn.Module):
+    def __init__(self, input_dim, hidden_dim, output_dim):
+        super().__init__()
+        self.encoder = nn.Sequential(
+            nn.Linear(input_dim, hidden_dim),
+            nn.LayerNorm(hidden_dim),
+            nn.GELU(),
+            nn.Linear(hidden_dim, output_dim),
+            nn.LayerNorm(output_dim),
+            nn.GELU(),
+            nn.Linear(output_dim, output_dim)
+        )
+
+    def forward(self, x):
+        return self.encoder(x)
+
 class VICRegBaseline(nn.Module):
     def __init__(self, cfg):
         super().__init__()
-        # Read from config, fallback to defaults if not present
-        img_embed_dim = cfg.models.img_embed_dim
-        gex_embed_dim = cfg.models.gex_embed_dim
-        projection_dim = cfg.models.projection_dim
         self.sim_coeff = cfg.models.sim_coeff
         self.std_coeff = cfg.models.std_coeff
         self.cov_coeff = cfg.models.cov_coeff
-        self.projection_dim = projection_dim
+        self.projection_dim = cfg.models.projection_dim
+        hidden_dim = cfg.models.projection_hidden_dim
 
-        self.img_proj = nn.Sequential(
-            nn.Linear(img_embed_dim, projection_dim),
-            nn.BatchNorm1d(projection_dim),
-            nn.ReLU(),
-            nn.Linear(projection_dim, projection_dim, bias=False)
-        )
-
-        self.gex_proj = nn.Sequential(
-            nn.Linear(gex_embed_dim, projection_dim),
-            nn.BatchNorm1d(projection_dim),
-            nn.ReLU(),
-            nn.Linear(projection_dim, projection_dim, bias=False)
-        )
+        self.img_encoder = VICRegEncoder(cfg.models.img_embed_dim, hidden_dim, self.projection_dim)
+        self.gex_encoder = VICRegEncoder(cfg.models.gex_embed_dim, hidden_dim, self.projection_dim)
 
     def forward(self, img_embed, gex_embed):
-        x = self.img_proj(img_embed)
-        y = self.gex_proj(gex_embed)
+        x = self.img_encoder(img_embed)
+        y = self.gex_encoder(gex_embed)
 
         repr_loss = F.mse_loss(x, y)
 
-        # Variance loss
         std_x = torch.sqrt(x.var(dim=0) + 1e-4)
         std_y = torch.sqrt(y.var(dim=0) + 1e-4)
-        std_loss = torch.mean(F.relu(1 - std_x)) / 2 + torch.mean(F.relu(1 - std_y)) / 2
+        std_loss = (F.relu(1 - std_x).mean() + F.relu(1 - std_y).mean()) / 2
 
-        # Covariance loss
-        x = x - x.mean(dim=0)
-        y = y - y.mean(dim=0)
-        cov_x = (x.T @ x) / (x.size(0) - 1)
-        cov_y = (y.T @ y) / (y.size(0) - 1)
-        cov_loss = self._off_diagonal(cov_x).pow(2).sum() / self.projection_dim
-        cov_loss += self._off_diagonal(cov_y).pow(2).sum() / self.projection_dim
+        cov_x = self._off_diagonal_cov(x)
+        cov_y = self._off_diagonal_cov(y)
+        cov_loss = (cov_x + cov_y) / self.projection_dim
 
-        loss = self.sim_coeff * repr_loss + self.std_coeff * std_loss + self.cov_coeff * cov_loss
-        return loss
+        return (
+            self.sim_coeff * repr_loss
+            + self.std_coeff * std_loss
+            + self.cov_coeff * cov_loss
+        )
+
+    def _off_diagonal_cov(self, z):
+        z_centered = z - z.mean(dim=0)
+        cov = (z_centered.T @ z_centered) / (z.size(0) - 1)
+        return self._off_diagonal(cov).pow(2).sum()
 
     def _off_diagonal(self, x):
+        # Extract off-diagonal elements
         n, m = x.shape
         assert n == m
         return x.flatten()[:-1].view(n - 1, n + 1)[:, 1:].flatten()
 
     def get_embeddings(self, img_embed, gex_embed):
-        x = F.normalize(self.img_proj(img_embed), dim=-1)
-        y = F.normalize(self.gex_proj(gex_embed), dim=-1)
-        return x, y 
+        z1 = F.normalize(self.img_encoder(img_embed), dim=-1)
+        z2 = F.normalize(self.gex_encoder(gex_embed), dim=-1)
+        return z1, z2

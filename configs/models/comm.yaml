@@ -10,3 +10,4 @@ pool: "cls"     # Pooling strategy (cls or mean)
 img_embed_dim: 1536
 gex_embed_dim: 128
 temperature: 0.07
+best_checkpoint: "trained_models/comm/lightning_lung_L_lr0.0005_wd0.001_seed42.ckpt"

@@ -1,6 +1,6 @@
 defaults:
   - data: lung
-  - models: simclr
+  - models: nicheformer
   - training: pretrain
-  - wandb: alignment
+  - wandb: nicheformer
   - _self_ 

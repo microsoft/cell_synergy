@@ -1,0 +1,17 @@
+# Training configuration for 1K donors model
+max_epochs: 100
+batch_size: 64
+learning_rate: 2e-4  # Scaled down from 2k model
+seed: 43
+accumulate_grad_batches: 2 
+weight_decay: 0.1
+val_fraction: 0.1  # Added validation split
+gradient_clip_val: 1.0
+gradient_clip_algorithm: "value"
+max_steps: None
+resume: True
+gpus: [0,1,2,3,4,5,6,7]  # Use all 8 GPUs
+
+# Checkpoint registry for resuming training (populate when checkpoints are available)
+checkpoint_dir: "RevisedFinal_nf_1000donors_lr0_0002_wd0_1"  # e.g., "RevisedFinal_nf_1000donors_lr2e-4_wd0_1"
+wandb_id: "<id>"        # e.g., "wandb_run_id_here"

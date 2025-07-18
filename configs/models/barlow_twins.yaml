@@ -6,3 +6,5 @@ lambda_param: 0.0051
 scale_loss: 0.025 
 img_embed_dim: 1536
 gex_embed_dim: 128
+projection_hidden_dim: 512
+checkpoint_path: "trained_models/barlow_twins/best_barlow_twins_lr0.005_wd1e-05-epoch=121-val_loss=77.2124.ckpt"

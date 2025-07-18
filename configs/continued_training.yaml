@@ -1,0 +1,6 @@
+defaults:
+  - data: lung
+  - models: nicheformer
+  - training: continued_pretrain
+  - wandb: continue_pretrain
+  - _self_ 

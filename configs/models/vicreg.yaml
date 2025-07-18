@@ -2,8 +2,10 @@ method: "vicreg"
 gex_encoder: "S"
 img_encoder: "S"
 projection_dim: 256
+projection_hidden_dim: 512
 sim_coeff: 25.0
 std_coeff: 25.0
 cov_coeff: 1.0 
 img_embed_dim: 1536
 gex_embed_dim: 128
+checkpoint_path: "trained_models/vicreg/best_vicreg_lr0.0005_wd1e-05-epoch=107-val_loss=19.5450.ckpt"

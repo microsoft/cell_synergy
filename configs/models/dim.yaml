@@ -1,0 +1,11 @@
+method: "dim"
+img_embed_dim: 1024
+gex_embed_dim: 128
+projection_dim: 256
+hidden_dims: [512, 256]
+dropout: 0.1
+use_batchnorm: true
+local_dim: 64           # Dimension of local features (if using local-global MI)
+mi_estimator: 'dot'     # Type of MI estimator: 'dot' or 'bilinear'
+projection_hidden_dim: 512
+checkpoint_path: "trained_models/dim/best_dim_lr1e-05_wd0.001-epoch=61-val_loss=6.5268.ckpt"

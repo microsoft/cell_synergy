@@ -1,0 +1,10 @@
+method: "byol"
+img_embed_dim: 1024
+gex_embed_dim: 128
+projection_dim: 256
+projection_hidden_dim: 512
+hidden_dims: [512, 256]
+dropout: 0.1
+use_batchnorm: true
+ema_decay: 0.99
+checkpoint_path: "trained_models/byol/best_byol_lr0.0001_wd0.0001-epoch=46-val_loss=-1.0000.ckpt"

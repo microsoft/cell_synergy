@@ -1,0 +1,13 @@
+batch_size: 128
+num_workers: 4  # Changed from 0
+max_epochs: 100
+early_stopping_patience: 10
+learning_rate: 7e-4
+weight_decay: 1e-5
+accumulate_grad_batches: 1
+optimizer: adamw
+gradient_clip_val: 1.0
+gradient_clip_algorithm: "value"
+seed: 42 
+max_steps: None
+resume: True

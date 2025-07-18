@@ -1,0 +1,11 @@
+# configs/align.yaml
+defaults:
+  - data: lung  # This loads lung.yaml with all the dataset-specific configs
+  - models: simclr  # New config for alignment models
+  - training: alignment  # New config for alignment training
+  - wandb: alignment  # New config for alignment wandb settings
+  - _self_
+
+# Override/add alignment-specific settings
+data:
+  split: pretrain  # Default to pretrain split

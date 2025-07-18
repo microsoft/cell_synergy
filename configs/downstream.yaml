@@ -1,0 +1,46 @@
+defaults:
+  - _self_
+  - data: lung
+  - models: byol  # Default alignment method, will load checkpoint path from here
+
+evaluation:
+  modality: "multimodal"  # One of: multimodal, unimodal_img, unimodal_gex
+  img_model: "200M"  # One of: 1M, 22M, 100M, 200M
+  gex_model: "full"  # One of: full, finetune_S, finetune_M, finetune_L
+  align_method: "byol"  # One of: byol, simclr, barlow_twins, vicreg, comm, etc.
+  split: "test" # One of: pretrain, finetune, test
+  scale: "S"  # One of: S, M, L (note: scale is not used in test, keep S for consistency)
+  tasks:
+    classify: true
+    regress: true
+    spatial: false
+
+data:
+  img_embed_key: "img_uni_pool"
+  gex_embed_key: "nicheformer_pool"
+  num_proc: 4
+  multimodal:
+    test: ${oc.load:data/lung.yaml:multimodal.test}
+
+training:
+  classification:
+    label_key: "annotation"
+    learning_rate: 1e-3
+    weight_decay: 1e-4
+    batch_size: 32
+    max_epochs: 100
+    early_stopping_patience: 10
+
+  regression:
+    label_key: "cell_type_ratio"
+    learning_rate: 1e-3
+    weight_decay: 1e-4
+    batch_size: 32
+    max_epochs: 100
+    early_stopping_patience: 10
+
+  spatial_neighbor:
+    task_type: "regression"
+    num_bins: 5
+    distance_metric: "euclidean"
+    summary_strategy: "mean"
