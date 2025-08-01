@@ -7,4 +7,4 @@ dropout: 0.1
 use_batchnorm: true
 projection_hidden_dim: 512
 pred_dim: 128
-checkpoint_path: "trained_models/simsiam/best_simsiam_lr0.0001_wd0.0001-epoch=51-val_loss=-1.0000.ckpt"
+checkpoint_path: "simsiam/best_simsiam_lr1e-05_wd1e-05-epoch=91-val_loss=-0.9718.ckpt"

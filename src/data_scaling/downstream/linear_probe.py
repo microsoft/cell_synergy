@@ -35,7 +35,7 @@ def train_linear_probe(
     train_labels = train_labels.to(device)
     test_labels = test_labels.to(device)
 
-    input_dim = train_embeddings.shape[1]
+    input_dim = train_embeddings.shape[1]  # Use actual input dimension from data
     batch_size = min(training_cfg.batch_size, 512)
 
     if verbose:
@@ -64,6 +64,7 @@ def train_linear_probe(
 
     losses = []
     grad_norms = []
+    train_metrics = []  # Track training metrics
 
     if verbose:
         print("Starting training...")
@@ -72,6 +73,8 @@ def train_linear_probe(
         model.train()
         total_loss = 0.0
         total_grad_norm = 0.0
+        epoch_preds = []
+        epoch_labels = []
 
         for xb, yb in train_loader:
             optimizer.zero_grad()
@@ -84,6 +87,11 @@ def train_linear_probe(
 
             optimizer.step()
             total_loss += loss.item()
+            
+            # Collect predictions and labels for epoch metrics
+            if task_type == "classification":
+                epoch_preds.extend(preds.argmax(dim=1).cpu().numpy())
+                epoch_labels.extend(yb.cpu().numpy())
 
         scheduler.step()
 
@@ -92,8 +100,18 @@ def train_linear_probe(
         losses.append(avg_loss)
         grad_norms.append(avg_grad_norm)
 
-        if verbose and (epoch + 1) % 10 == 0:
-            print(f"Epoch {epoch+1:3d}: Loss = {avg_loss:.4f}, GradNorm = {avg_grad_norm:.4f}")
+        # Compute training metrics for classification
+        if task_type == "classification":
+            train_acc = accuracy_score(epoch_labels, epoch_preds)
+            train_f1 = f1_score(epoch_labels, epoch_preds, average='macro')
+            train_metrics.append({'accuracy': train_acc, 'f1_macro': train_f1})
+            
+            if verbose and (epoch + 1) % 10 == 0:
+                print(f"Epoch {epoch+1:3d}: Loss = {avg_loss:.4f}, GradNorm = {avg_grad_norm:.4f}")
+                print(f"           Train Accuracy = {train_acc:.4f}, Train Macro F1 = {train_f1:.4f}")
+        else:
+            if verbose and (epoch + 1) % 10 == 0:
+                print(f"Epoch {epoch+1:3d}: Loss = {avg_loss:.4f}, GradNorm = {avg_grad_norm:.4f}")
 
     # --- Final evaluation ---
     model.eval()
@@ -102,20 +120,72 @@ def train_linear_probe(
         y_true = test_labels.cpu()
 
     if task_type == "regression":
+        # Check for NaN values in predictions or true values
+        y_pred_np = y_pred.numpy()
+        y_true_np = y_true.numpy()
+        
+        if np.any(np.isnan(y_pred_np)) or np.any(np.isinf(y_pred_np)):
+            print("Warning: NaN or infinite values in predictions, returning default metrics")
+            return {
+                "r2": 0.0,
+                "mse": float('inf'),
+                "y_pred": y_pred_np,
+                "y_true": y_true_np,
+                "loss_curve": losses,
+                "grad_norms": grad_norms,
+            }
+        
+        if np.any(np.isnan(y_true_np)) or np.any(np.isinf(y_true_np)):
+            print("Warning: NaN or infinite values in true values, returning default metrics")
+            return {
+                "r2": 0.0,
+                "mse": float('inf'),
+                "y_pred": y_pred_np,
+                "y_true": y_true_np,
+                "loss_curve": losses,
+                "grad_norms": grad_norms,
+            }
+        
+        # Check if there's variance in the true values
+        if np.std(y_true_np) == 0:
+            print("Warning: No variance in true values, R² calculation not meaningful")
+            return {
+                "r2": 0.0,
+                "mse": mean_squared_error(y_true_np, y_pred_np),
+                "y_pred": y_pred_np,
+                "y_true": y_true_np,
+                "loss_curve": losses,
+                "grad_norms": grad_norms,
+            }
+        
         return {
-            "r2": r2_score(y_true.numpy(), y_pred.numpy(), multioutput='uniform_average'),
-            "mse": mean_squared_error(y_true.numpy(), y_pred.numpy()),
-            "y_pred": y_pred.numpy(),
-            "y_true": y_true.numpy(),
+            "r2": r2_score(y_true_np, y_pred_np, multioutput='uniform_average'),
+            "mse": mean_squared_error(y_true_np, y_pred_np),
+            "y_pred": y_pred_np,
+            "y_true": y_true_np,
             "loss_curve": losses,
             "grad_norms": grad_norms,
         }
     else:
-        acc = accuracy_score(y_true.numpy(), y_pred.argmax(dim=1).numpy())
-        f1 = f1_score(y_true.numpy(), y_pred.argmax(dim=1).numpy(), average="macro")
+        # Get final training metrics
+        final_train_metrics = train_metrics[-1] if train_metrics else {'accuracy': 0.0, 'f1_macro': 0.0}
+        
+        # Compute test metrics
+        test_pred = y_pred.argmax(dim=1).numpy()
+        test_acc = accuracy_score(y_true.numpy(), test_pred)
+        test_f1 = f1_score(y_true.numpy(), test_pred, average="macro")
+        
+        print("\nFinal metrics:")
+        print(f"  Train Accuracy: {final_train_metrics['accuracy']:.4f}")
+        print(f"  Train Macro F1: {final_train_metrics['f1_macro']:.4f}")
+        print(f"  Test Accuracy:  {test_acc:.4f}")
+        print(f"  Test Macro F1:  {test_f1:.4f}")
+        
         return {
-            "accuracy": acc,
-            "f1_macro": f1,
+            "accuracy": test_acc,
+            "f1_macro": test_f1,
+            "train_accuracy": final_train_metrics['accuracy'],
+            "train_f1_macro": final_train_metrics['f1_macro'],
             "y_pred": y_pred.numpy(),
             "y_true": y_true.numpy(),
             "loss_curve": losses,

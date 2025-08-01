@@ -363,6 +363,7 @@ def create_data_module(config: DictConfig, data_dir: Path, world_size: int) -> M
     module = MerlinDataModuleDistributedWithValidation(
         path=str(data_dir),
         columns=key_organ,
+        
         batch_size=config.training.batch_size,
         world_size=world_size,
         val_fraction=val_fraction,  # Use validation fraction from config
@@ -370,6 +371,7 @@ def create_data_module(config: DictConfig, data_dir: Path, world_size: int) -> M
             "device": "cpu",
             "parts_per_chunk": config.data.parts_per_chunk,
             "drop_last": True,
+            "shuffle": False,  # Some Azure errors with shuffling and job requeueing
         }, 
         dataloader_kwargs_inference={
             "device": "cpu",

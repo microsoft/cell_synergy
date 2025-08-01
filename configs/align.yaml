@@ -8,4 +8,4 @@ defaults:
 
 # Override/add alignment-specific settings
 data:
-  split: pretrain  # Default to pretrain split
+  split: train  # Default to train split

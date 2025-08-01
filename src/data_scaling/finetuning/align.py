@@ -48,24 +48,20 @@ class ProcessedHFDataset(Dataset):
         self.split = cfg.data.split
         
         # Validate split
-        if self.split not in ['pretrain', 'finetune', 'test']:
-            raise ValueError(f"Invalid split: {self.split}. Must be one of: pretrain, finetune, test")
+        if self.split not in ['train', 'test']:
+            raise ValueError(f"Invalid split: {self.split}. Must be one of: train, test")
         
         # Get the appropriate scale based on the split
-        if self.split == 'pretrain':
-            if not hasattr(cfg.data, 'pretrain_split'):
-                raise ValueError("Config must specify data.pretrain_split when split is 'pretrain'")
-            self.scale = cfg.data.pretrain_split  # This will be S, M, or L
-        elif self.split == 'finetune':
-            if not hasattr(cfg.data, 'finetune_split'):
-                raise ValueError("Config must specify data.finetune_split when split is 'finetune'")
-            self.scale = cfg.data.finetune_split  # This will be S, M, or L
+        if self.split == 'train':
+            if not hasattr(cfg.data, 'train_split'):
+                raise ValueError("Config must specify data.train_split when split is 'train'")
+            self.scale = cfg.data.train_split  # This will be S, M, or L
         else:  # test split
             self.scale = 'test'  # Test split doesn't have a scale
         
         # Get model choices from config
-        self.gex_model = cfg.data.gex_pretrain_choice
-        self.img_model = cfg.data.img_pretrain_choice
+        self.gex_model = cfg.data.gex_train_choice
+        self.img_model = cfg.data.img_train_choice
         
         print(f"Initializing {self.dataset} dataset with:")
         print(f"Split: {self.split}")
@@ -80,10 +76,9 @@ class ProcessedHFDataset(Dataset):
         """Pre-compute and store only the needed embeddings."""
         try:
             # Load from the standardized location in project_folder
-            if self.cfg.data.dataset == "lung":
-                dataset_path = PROJECT_DIR / "lung_hf"
-            else:
-                dataset_path = PROJECT_DIR / f"{self.cfg.data.dataset}_hf"
+            subdir = f"{self.gex_model}_{self.img_model}_{self.split}.{self.scale}"
+            dataset_path = PROJECT_DIR / f"{self.dataset}" / "hf_datasets" / subdir
+
             if not dataset_path.exists():
                 raise FileNotFoundError(
                     f"Dataset not found at {dataset_path}. "
@@ -96,60 +91,60 @@ class ProcessedHFDataset(Dataset):
             
             # Create indices list for samples matching our split and scale
             print("🧱 Building sample index...")
-            self.indices = []
-
-            # Check if dataset has split/scale columns (e.g. alignment case)
-            has_split_columns = 'split' in self.dataset.column_names and 'scale' in self.dataset.column_names
-
             print(f"🧾 Dataset columns: {self.dataset.column_names}")
             
-            if has_split_columns:
-                print(f"🔧 Has split/scale columns: {has_split_columns}")
-                if self.split == 'test':
-                    for i, split_val in enumerate(tqdm(self.dataset['split'])):
-                        if split_val == 'test':
-                            self.indices.append(i)
-                else:
-                    for i, (split_val, scale_val) in enumerate(tqdm(zip(self.dataset['split'], self.dataset['scale']))):
-                        if split_val == self.split and scale_val == self.scale:
-                            self.indices.append(i)
-            else:
-                # 🧪 Fallback for datasets without split/scale columns (e.g. combined HF dataset)
-                print("⚠️  Falling back to filtering based on name matching")
-                
-                donor_list = self.cfg.data.multimodal.test
+            # Simple datapoint-level validation split for better signal
+            print("Datapoint-level validation split for stable validation metrics")
+            
+            total_samples = len(self.dataset)
+            print(f"Total samples in dataset: {total_samples}")
 
-                for i, name in enumerate(tqdm(self.dataset['name'])):
-                    # Use exact name match rather than partial donor ID (more robust)
-                    if name in donor_list:
-                        self.indices.append(i)
+            # Create reproducible random indices
+            rng = np.random.RandomState(self.random_seed)
+            all_indices = np.arange(total_samples)
+            rng.shuffle(all_indices)
+
+            # Split indices based on validation fraction
+            val_count = int(total_samples * self.val_fraction)
+            if self.val_split:
+                self.indices = all_indices[:val_count].tolist()
+                split_type = "validation"
+            else:
+                self.indices = all_indices[val_count:].tolist()
+                split_type = "training"
+            
+            print(f"Selected {len(self.indices)} samples for {split_type} split.")
 
             if not self.indices:
-                raise ValueError(
-                    f"No samples found for combination:\n"
-                    f"  Split: {self.split}\n"
-                    f"  Scale: {self.scale}"
-                )
-
-            # Optional: train/val split
-            if self.val_fraction > 0:
-                np.random.seed(self.random_seed)
-                total_samples = len(self.indices)
-                val_size = int(total_samples * self.val_fraction)
-                shuffled_indices = np.array(self.indices.copy())
-                np.random.shuffle(shuffled_indices)
-
-                if self.val_split:
-                    self.indices = shuffled_indices[:val_size].tolist()
-                    split_type = "validation"
-                else:
-                    self.indices = shuffled_indices[val_size:].tolist()
-                    split_type = "training"
-                print(f"📊 Created {split_type} split with {len(self.indices)} samples")
+                raise ValueError(f"No samples found for {split_type} split")
 
             # Stats and dimension validation
             print(f"\n📈 Dataset statistics:")
             print(f"  ✅ Found {len(self.indices)} total samples")
+            
+            # Check for NaN embeddings in the dataset
+            nan_count = 0
+            valid_count = 0
+            for idx in self.indices[:100]:  # Sample first 100 to estimate
+                sample = self.dataset[idx]
+                img_embed = torch.tensor(sample['img_uni_pool'], dtype=torch.float32)
+                gex_embed = torch.tensor(sample['nicheformer_pool'], dtype=torch.float32)
+                if torch.isnan(img_embed).any() or torch.isnan(gex_embed).any():
+                    nan_count += 1
+                else:
+                    valid_count += 1
+            
+            # Estimate total NaN samples
+            if len(self.indices) > 100:
+                nan_ratio = nan_count / 100
+                estimated_nan = int(nan_ratio * len(self.indices))
+                estimated_valid = len(self.indices) - estimated_nan
+                print(f"  ⚠️  Estimated {estimated_nan} samples with NaN embeddings (will be filtered)")
+                print(f"  ✅ Estimated {estimated_valid} valid samples for training")
+            else:
+                print(f"  ⚠️  {nan_count} samples with NaN embeddings (will be filtered)")
+                print(f"  ✅ {valid_count} valid samples for training")
+            
             sample = self.dataset[self.indices[0]]
             self.img_dim = len(sample['img_uni_pool'])
             self.gex_dim = len(sample['nicheformer_pool'])
@@ -185,8 +180,28 @@ class ProcessedHFDataset(Dataset):
                 f"Expected gex_dim={self.gex_dim}, got {gex_embed.shape[0]}"
             )
         
+        # Filter out samples with NaN embeddings
+        if torch.isnan(img_embed).any() or torch.isnan(gex_embed).any():
+            # Return None to indicate this sample should be skipped
+            return None
+        
         return img_embed, gex_embed
 
+
+def nan_filtering_collate(batch):
+    """Custom collate function that filters out None values (NaN embeddings)."""
+    # Filter out None values
+    valid_batch = [item for item in batch if item is not None]
+    
+    if not valid_batch:
+        # If all items are None, return empty tensors
+        return torch.empty(0, 1024), torch.empty(0, 512)  # Default dimensions
+    
+    # Stack valid items
+    img_embeds = torch.stack([item[0] for item in valid_batch])
+    gex_embeds = torch.stack([item[1] for item in valid_batch])
+    
+    return img_embeds, gex_embeds
 
 def get_paired_dataloader(cfg, batch_size=None, shuffle=True, num_workers=None, val_split=False, val_fraction=0.2):
     """Get dataloader with memory-efficient settings."""
@@ -223,6 +238,7 @@ def get_paired_dataloader(cfg, batch_size=None, shuffle=True, num_workers=None, 
         num_workers=num_workers,
         pin_memory=True,  # Faster data transfer to GPU
         persistent_workers=num_workers > 0,  # Keep workers alive between batches
+        collate_fn=nan_filtering_collate,  # Use custom collate function
     )
 
 
@@ -242,9 +258,32 @@ class AlignmentTrainer(pl.LightningModule):
         self.config = config
         self.save_hyperparameters(ignore=['model'])
         self.automatic_optimization = True
+        
+        # Add moving average for validation loss smoothing
+        self.val_losses = []
+        self.val_loss_smoothing = config.training.get('val_loss_smoothing', 0.9)
 
     def training_step(self, batch, batch_idx):
         img_embed, gex_embed = batch
+        
+        # Handle empty batches (all samples had NaN embeddings)
+        if img_embed.size(0) == 0 or gex_embed.size(0) == 0:
+            # Return a dummy loss that won't affect training
+            dummy_loss = torch.tensor(0.0, device=self.device, requires_grad=True)
+            self.log('train_loss_step', dummy_loss, 
+                    on_step=True, 
+                    on_epoch=False, 
+                    prog_bar=False, 
+                    logger=True,
+                    sync_dist=True)
+            self.log('train_loss', dummy_loss, 
+                    on_step=False, 
+                    on_epoch=True, 
+                    prog_bar=True, 
+                    logger=True,
+                    sync_dist=True)
+            return dummy_loss
+        
         # No need for pooling anymore as data is already flattened
         
         if hasattr(self.model, 'compute_loss'):
@@ -272,38 +311,82 @@ class AlignmentTrainer(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         """Validation step - special handling for adversarial training."""
         img_embed, gex_embed = batch
-        
-        # For adversarial training, ensure model stays in training mode for stability
-        if hasattr(self.model, 'compute_loss') and 'adversarial' in str(type(self.model)).lower():
-            # Keep the model in training mode for adversarial networks during validation
-            # This prevents BatchNorm and other issues that cause instability in eval mode
-            self.model.train()
-            
-            with torch.no_grad():  # Still disable gradients for validation
-                loss = self.model.compute_loss(img_embed, gex_embed)
-        else:
-            # Standard validation for other models
-            if hasattr(self.model, 'compute_loss'):
-                loss = self.model.compute_loss(img_embed, gex_embed)
-            else:
-                loss = self.model(img_embed, gex_embed)
-        
-        # Add validation loss clipping for numerical stability
-        if torch.isnan(loss) or torch.isinf(loss) or loss > 1e6:
-            print(f"Warning: Invalid validation loss {loss} at batch {batch_idx}, skipping...")
+
+        # Handle empty batches (e.g., all samples had NaN embeddings)
+        if img_embed.size(0) == 0 or gex_embed.size(0) == 0:
+            print(f"Skipping empty batch at idx {batch_idx}")
             return None
-        
-        # Only log per epoch for validation
-        self.log('val_loss', loss, 
-                on_step=False, 
-                on_epoch=True, 
-                prog_bar=True, 
+
+        try:
+            # For adversarial training, keep model in train mode
+            if hasattr(self.model, 'compute_loss') and 'adversarial' in str(type(self.model)).lower():
+                self.model.train()
+                with torch.no_grad():
+                    loss = self.model.compute_loss(img_embed, gex_embed)
+            else:
+                if hasattr(self.model, 'compute_loss'):
+                    loss = self.model.compute_loss(img_embed, gex_embed)
+                else:
+                    loss = self.model(img_embed, gex_embed)
+
+            # Skip invalid loss values
+            if torch.isnan(loss) or torch.isinf(loss) or loss > 1e6:
+                print(f"Skipping batch {batch_idx} due to invalid loss: {loss}")
+                return None
+
+        except Exception as e:
+            print(f"Exception in validation_step at batch {batch_idx}: {e}")
+            return None
+
+        # Store loss for epoch-level metrics
+        self.val_losses.append(loss.detach().cpu().item())
+
+        # Log per-step and per-epoch loss
+        self.log('val_loss', loss,
+                on_step=False,
+                on_epoch=True,
+                prog_bar=True,
                 logger=True,
                 sync_dist=True)
-        
+
+        self.log('val_loss_raw', loss,
+                on_step=True,
+                on_epoch=False,
+                prog_bar=False,
+                logger=True,
+                sync_dist=True)
+
         return loss
 
+
+    def on_validation_epoch_end(self):
+        """Compute smoothed validation metrics at epoch end."""
+        if len(self.val_losses) > 0:
+            val_mean = np.mean(self.val_losses)
+
+            # Update EMA of validation loss
+            if hasattr(self, '_val_loss_ema'):
+                self._val_loss_ema = (self.val_loss_smoothing * self._val_loss_ema +
+                                    (1 - self.val_loss_smoothing) * val_mean)
+            else:
+                self._val_loss_ema = val_mean
+
+            # Log EMA-smoothed loss
+            self.log('val_loss_smooth', self._val_loss_ema,
+                    on_step=False,
+                    on_epoch=True,
+                    prog_bar=False,
+                    logger=True,
+                    sync_dist=True)
+
+        else:
+            print("Warning: No valid validation batches in this epoch.")
+
+        self.val_losses.clear()
+
+
     def configure_optimizers(self):
+
         lr = getattr(self.config.training, 'learning_rate', 1e-3)
         wd = getattr(self.config.training, 'weight_decay', 1e-5)
         optimizer = torch.optim.AdamW(self.model.parameters(), lr=lr, weight_decay=wd)
@@ -321,4 +404,3 @@ class AlignmentTrainer(pl.LightningModule):
                 "interval": "epoch"  # Update scheduler every epoch
             }
         }
-

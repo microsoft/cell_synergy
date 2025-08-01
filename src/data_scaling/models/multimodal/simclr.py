@@ -8,28 +8,11 @@ class SimCLRBaseline(nn.Module):
     def __init__(self, cfg):
         super().__init__()
         self.temperature = cfg.models.temperature
-        hidden_dim = cfg.models.get("projection_hidden_dim", 512)  # NEW
         proj_dim = cfg.models.projection_dim
 
-        self.img_projection = nn.Sequential(
-            nn.Linear(cfg.models.img_embed_dim, hidden_dim),
-            nn.LayerNorm(hidden_dim),
-            nn.GELU(),
-            nn.Linear(hidden_dim, proj_dim),
-            nn.LayerNorm(proj_dim),
-            nn.GELU(),
-            nn.Linear(proj_dim, proj_dim)
-        )
-
-        self.gex_projection = nn.Sequential(
-            nn.Linear(cfg.models.gex_embed_dim, hidden_dim),
-            nn.LayerNorm(hidden_dim),
-            nn.GELU(),
-            nn.Linear(hidden_dim, proj_dim),
-            nn.LayerNorm(proj_dim),
-            nn.GELU(),
-            nn.Linear(proj_dim, proj_dim)
-        )
+        # Linear projection layers
+        self.img_projection = nn.Linear(cfg.models.img_embed_dim, proj_dim)
+        self.gex_projection = nn.Linear(cfg.models.gex_embed_dim, proj_dim)
 
     def forward(self, img_embed, gex_embed):
         img_proj = F.normalize(self.img_projection(img_embed), dim=-1)
@@ -57,4 +40,3 @@ class SimCLRBaseline(nn.Module):
     def fusion(self, img_embed, gex_embed):
         img_proj, gex_proj = self.get_embeddings(img_embed, gex_embed)
         return torch.cat([img_proj, gex_proj], dim=-1)
-

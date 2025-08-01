@@ -9,6 +9,8 @@ hf_datasets:
   original: "theislab-multimodal-ssl/paired-image-gexp-xenium-lungmed55-broadCT6"
 
 multimodal:
+  train:
+    L: ['VUILD106', 'VUILD107MF', 'VUILD115', 'THD0008', 'VUILD110', 'TILD117MF', 'VUILD96MF', 'VUILD78MF', 'VUILD102LF', 'TILD175', 'VUILD96LF', 'VUILD104LF', 'VUILD48MF', 'TILD117LF', 'VUILD78LF', 'VUHD116B']
   pretrain:
     S: ['VUILD106', 'VUILD107MF']
     M: ['VUILD106', 'VUILD107MF', 'VUILD115', 'THD0008']
@@ -18,6 +20,7 @@ multimodal:
     M: ['VUILD102LF', 'TILD175', 'VUILD96LF', 'VUILD104LF']
     L: ['VUILD102LF', 'TILD175', 'VUILD96LF', 'VUILD104LF', 'VUILD48MF', 'TILD117LF', 'VUILD78LF', 'VUHD116B']
   test: ['THD0011', 'VUILD91LF', 'VUHD069', 'VUILD105MF', 'VUHD113', 'VUHD116A', 'VUHD095']
+
 
 gex_pretrain:
   1000_donors: 'nf_1000donors'
@@ -32,12 +35,13 @@ img_pretrain:
   200M: 'MahmoodLab/UNI2-h'
   1B: 'prov-gigapath/prov-gigapath'
 
-pretrain_split: "S"
-finetune_split: "S"
-test_split: "test"
-stage: "pretrain"  # pretrain, finetune, or test
-gex_pretrain_choice: "full"
-img_pretrain_choice: "200M"
+train_split: "L"  # S, M, or L
+pretrain_split: "L"
+finetune_split: "L"
+test_split: "L"
+stage: "train"  # pretrain, finetune, or test
+gex_train_choice: "full"
+img_train_choice: "200M"
 
 # HuggingFace dataset paths for alignment training
 hf_dataset_paths:

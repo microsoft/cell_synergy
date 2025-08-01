@@ -1,19 +1,22 @@
 defaults:
   - _self_
   - data: lung
-  - models: byol  # Default alignment method, will load checkpoint path from here
+  - models: comm  # Default alignment method, will load checkpoint path from here
 
 evaluation:
   modality: "multimodal"  # One of: multimodal, unimodal_img, unimodal_gex
   img_model: "200M"  # One of: 1M, 22M, 100M, 200M
   gex_model: "full"  # One of: full, finetune_S, finetune_M, finetune_L
-  align_method: "byol"  # One of: byol, simclr, barlow_twins, vicreg, comm, etc.
+  align_method: "comm"  # One of: byol, simclr, barlow_twins, vicreg, comm, etc.
   split: "test" # One of: pretrain, finetune, test
-  scale: "S"  # One of: S, M, L (note: scale is not used in test, keep S for consistency)
+  scale: "L"  # One of: S, M, L (note: scale is not used in test, keep S for consistency)
+  strategy: "test_only"  # One of: test_only, pretrain_only, finetune_only, pretrain_finetune
+  run_pca: true
+  per_sample: false
   tasks:
     classify: true
     regress: true
-    spatial: false
+    spatial: true
 
 data:
   img_embed_key: "img_uni_pool"
@@ -44,3 +47,5 @@ training:
     num_bins: 5
     distance_metric: "euclidean"
     summary_strategy: "mean"
+    max_neighbor_factor: 10  # Factor to multiply nearest neighbor distance for max range
+

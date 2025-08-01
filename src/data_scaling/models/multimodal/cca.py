@@ -47,11 +47,17 @@ class CCABaseline(nn.Module):
         super().__init__()
         self.outdim = cfg.models.projection_dim
         self.cca_model = LinearCCA()
+        self.is_fitted = False
 
     def forward(self, z1, z2):
         # assume z1, z2 are already frozen features
         z1_np, z2_np = z1.detach().cpu().numpy(), z2.detach().cpu().numpy()
-        self.cca_model.fit(z1_np, z2_np, self.outdim)
+        
+        # Only fit if not already fitted (for efficiency)
+        if not self.is_fitted:
+            self.cca_model.fit(z1_np, z2_np, self.outdim)
+            self.is_fitted = True
+            
         z1_proj, z2_proj = self.cca_model.transform(z1_np, z2_np)
         z1_proj = torch.from_numpy(z1_proj).to(z1.device)
         z2_proj = torch.from_numpy(z2_proj).to(z2.device)
@@ -60,6 +66,11 @@ class CCABaseline(nn.Module):
 
     def get_embeddings(self, z1, z2):
         z1_np, z2_np = z1.detach().cpu().numpy(), z2.detach().cpu().numpy()
+        
+        # Ensure model is fitted before getting embeddings
+        if not self.is_fitted:
+            raise RuntimeError("CCA model must be fitted before getting embeddings. Call forward() or fit manually first.")
+            
         z1_proj, z2_proj = self.cca_model.transform(z1_np, z2_np)
         return (
             torch.from_numpy(z1_proj).to(z1.device),

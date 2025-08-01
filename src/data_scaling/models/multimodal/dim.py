@@ -17,10 +17,6 @@ class DIMEncoder(nn.Module):
             nn.GELU(),
             nn.Linear(output_dim, output_dim)
         )
-        self.frozen = frozen
-        if frozen:
-            for p in self.encoder.parameters():
-                p.requires_grad = False
 
     def forward(self, x):
         return self.encoder(x)
@@ -35,10 +31,9 @@ class DIMBaseline(nn.Module):
 
         proj_dim = cfg.models.projection_dim
         hidden_dim = cfg.models.projection_hidden_dim
-        frozen = cfg.models.get("frozen_encoders", True)
 
-        self.img_encoder = DIMEncoder(cfg.models.img_embed_dim, hidden_dim, proj_dim, frozen=frozen)
-        self.gex_encoder = DIMEncoder(cfg.models.gex_embed_dim, hidden_dim, proj_dim, frozen=frozen)
+        self.img_encoder = DIMEncoder(cfg.models.img_embed_dim, hidden_dim, proj_dim)
+        self.gex_encoder = DIMEncoder(cfg.models.gex_embed_dim, hidden_dim, proj_dim)
 
         if self.mi_estimator_type == "bilinear":
             self.score_fn = nn.Bilinear(proj_dim, proj_dim, 1)

@@ -9,7 +9,11 @@ from pathlib import Path
 from typing import Dict, List, Tuple
 from omegaconf import DictConfig, ListConfig, OmegaConf
 from torch.utils.data import ConcatDataset, TensorDataset
-from datasets import load_from_disk
+from datasets import load_from_disk, load_dataset
+from torch.serialization import add_safe_globals
+
+# Add TensorDataset to safe globals for deserialization
+add_safe_globals([TensorDataset])
 
 from data_scaling.downstream.linear_probe import run_loocv_linear_probe, train_linear_probe
 from data_scaling.downstream.spatial_neighbor_distance_bins import run_spatial_neighbor
@@ -25,93 +29,172 @@ def load_and_filter_datasets(cfg: DictConfig) -> Dict[str, TensorDataset]:
     """Load datasets from enriched directory and filter for specific model combination."""
     project_dir = get_project_dir()
     hf_dir = project_dir / cfg.data.dataset / "hf_datasets"
-    
+
     modality = cfg.evaluation.modality
     img_model = cfg.evaluation.img_model
     gex_model = cfg.evaluation.gex_model
     split = cfg.evaluation.split
     scale = cfg.evaluation.scale
-    
+    label_key = cfg.training.classification.label_key
+
     print(f"\nLoading and filtering datasets for:")
     print(f"  - Modality: {modality}")
     print(f"  - Image model: {img_model}")
     print(f"  - GEX model: {gex_model}")
-    
+    print(f"  - Split: {split}")
+    print(f"  - Scale: {scale}")
+    print(f"  - Label key: {label_key}")
+
     # Build expected directory pattern based on modality
     if modality == "multimodal":
-        if split == "test":
-            # Test split has no scale, kept S for backwards compatibility
-            pattern = f"{gex_model}_{img_model}_test.S"
-        else:
-            pattern = f"{gex_model}_{img_model}_{split}.{scale}"
+        # For multimodal, we keep the existing pattern
+        pattern = f"{gex_model}_{img_model}_test.S" if split == "test" else f"{gex_model}_{img_model}_{split}.{scale}"
     elif modality == "unimodal_img":
-        if split == "test":
-            pattern = f"{img_model}_test.S"
-        else:
-            pattern = f"{img_model}_{split}.{scale}"
+        # For unimodal image, use the new img_only pattern
+        pattern = f"img_only_{img_model}_test.{scale}" if split == "test" else f"img_only_{img_model}_{split}.{scale}"
     elif modality == "unimodal_gex":
-        if split == "test":
-            pattern = f"{gex_model}_test.S"
-        else:
-            pattern = f"{gex_model}_{split}.{scale}"
+        # For unimodal GEX, use the new gex_only pattern with model name
+        pattern = f"gex_only_{gex_model}_test.{scale}" if split == "test" else f"gex_only_{gex_model}_{split}.{scale}"
     else:
         raise ValueError(f"Invalid modality: {modality}")
-    
-    # Find matching directory
+
+    # Check if dataset exists
     test_dir = hf_dir / pattern
     if not test_dir.exists():
         raise ValueError(
             f"Test directory not found: {test_dir}\n"
             f"Available directories: {[d.name for d in hf_dir.glob('*')]}"
         )
-    
-    print(f"Loading test dataset from {test_dir}")
-    ds = load_from_disk(str(test_dir))
-    
-    # Group by donor
-    donor_datasets = {}
+
+    print(f"\nLoading test dataset from: {test_dir}")
+    ds: Dataset = load_from_disk(str(test_dir))
+
+    print("\nDataset features:")
+    for feature, info in ds.features.items():
+        shape = getattr(info, 'shape', 'N/A')
+        print(f"  - {feature}: type={type(info)}, shape={shape}")
+
+    if label_key not in ds.column_names:
+        raise KeyError(f"Label key '{label_key}' not found in dataset columns: {ds.column_names}")
+
+    # Sample check before full processing
+    sample_label = ds[0][label_key]
+    print(f"\nSample label value for key '{label_key}':")
+    print(f"  - Value: {sample_label}")
+    print(f"  - Type: {type(sample_label)}")
+    if isinstance(sample_label, (list, np.ndarray)):
+        print(f"  - Shape: {np.array(sample_label).shape}")
+        if not np.isscalar(np.array(sample_label)).all():
+            print("  - [Warning] Label is a vector, not a scalar. This may cause shape mismatch.")
+
+    # Group by donor name prefix
+    donor_datasets: Dict[str, list] = {}
     for sample in ds:
         donor = sample["name"].split("_")[0]
-        if donor not in donor_datasets:
-            donor_datasets[donor] = []
-        donor_datasets[donor].append(sample)
-    
+        donor_datasets.setdefault(donor, []).append(sample)
+
+    print("\nFound donors:")
+    for donor, samples in donor_datasets.items():
+        print(f"  - {donor}: {len(samples)} samples")
+
     # Convert to tensor datasets
-    tensor_datasets = {}
+    tensor_datasets: Dict[str, TensorDataset] = {}
     for donor, samples in donor_datasets.items():
         if not samples:
             continue
-            
-        # Extract embeddings based on modality
-        if modality == "multimodal":
-            img_embeds = torch.tensor([s["img_uni_pool"] for s in samples])
-            gex_embeds = torch.tensor([s["nicheformer_pool"] for s in samples])
-            labels = torch.tensor([s[cfg.training.classification.label_key] for s in samples])
-            tensor_datasets[donor] = TensorDataset(img_embeds, gex_embeds, labels)
-        elif modality == "unimodal_img":
-            img_embeds = torch.tensor([s["img_uni_pool"] for s in samples])
-            labels = torch.tensor([s[cfg.training.classification.label_key] for s in samples])
-            tensor_datasets[donor] = TensorDataset(img_embeds, labels)
-        else:  # unimodal_gex
-            gex_embeds = torch.tensor([s["nicheformer_pool"] for s in samples])
-            labels = torch.tensor([s[cfg.training.classification.label_key] for s in samples])
-            tensor_datasets[donor] = TensorDataset(gex_embeds, labels)
-    
-    # Validate embedding dimensions
-    first_donor = next(iter(tensor_datasets.values()))
-    first_shape = first_donor.tensors[0].shape[1]  # First embedding dimension
-    for donor, ds in tensor_datasets.items():
-        if ds.tensors[0].shape[1] != first_shape:
-            raise ValueError(
-                f"Inconsistent embedding dimensions!\n"
-                f"First donor had shape {first_shape}\n"
-                f"Donor {donor} has shape {ds.tensors[0].shape[1]}"
-            )
-    
-    print(f"\nSuccessfully loaded data for {len(tensor_datasets)} donors:")
+
+        if not tensor_datasets:
+            print(f"\nFirst sample from donor {donor}:")
+            for k, v in samples[0].items():
+                if isinstance(v, (list, np.ndarray)):
+                    print(f"  - {k}: shape={np.array(v).shape}, type={type(v)}")
+                else:
+                    print(f"  - {k}: value={v}, type={type(v)}")
+
+        try:
+            # Prepare features and labels based on modality
+            if modality == "multimodal":
+                img_embeds = torch.tensor([s["img_uni_pool"] for s in samples])
+                gex_embeds = torch.tensor([s["nicheformer_pool"] for s in samples])
+                labels = torch.tensor([s[label_key] if isinstance(s[label_key], (int, float)) else np.argmax(s[label_key]) for s in samples])
+                
+                # Add regression labels if available and needed
+                if cfg.evaluation.tasks.regress:
+                    regression_key = cfg.training.regression.label_key
+                    if regression_key in samples[0]:
+                        # FIX: Use the entire cell type ratio vector, not just the first element
+                        reg_labels = torch.tensor([s[regression_key] for s in samples])
+                        tensor_datasets[donor] = TensorDataset(img_embeds, gex_embeds, labels, reg_labels)
+                    else:
+                        # Create dummy regression labels
+                        reg_labels = torch.zeros(len(samples), 10)  # 10 cell types
+                        tensor_datasets[donor] = TensorDataset(img_embeds, gex_embeds, labels, reg_labels)
+                else:
+                    tensor_datasets[donor] = TensorDataset(img_embeds, gex_embeds, labels)
+
+            elif modality == "unimodal_img":
+                img_embeds = torch.tensor([s["img_uni_pool"] for s in samples])
+                labels = torch.tensor([s[label_key] if isinstance(s[label_key], (int, float)) else np.argmax(s[label_key]) for s in samples])
+                print(f"\nImage embeddings shape for {donor}: {img_embeds.shape}")
+                
+                # Add regression labels if available and needed
+                if cfg.evaluation.tasks.regress:
+                    regression_key = cfg.training.regression.label_key
+                    if regression_key in samples[0]:
+                        # FIX: Use the entire cell type ratio vector, not just the first element
+                        reg_labels = torch.tensor([s[regression_key] for s in samples])
+                        tensor_datasets[donor] = TensorDataset(img_embeds, labels, reg_labels)
+                    else:
+                        # Create dummy regression labels
+                        reg_labels = torch.zeros(len(samples), 10)  # 10 cell types
+                        tensor_datasets[donor] = TensorDataset(img_embeds, labels, reg_labels)
+                else:
+                    tensor_datasets[donor] = TensorDataset(img_embeds, labels)
+
+            elif modality == "unimodal_gex":
+                gex_embeds = torch.tensor([s["nicheformer_pool"] for s in samples])
+                labels = torch.tensor([s[label_key] if isinstance(s[label_key], (int, float)) else np.argmax(s[label_key]) for s in samples])
+                
+                # Add regression labels if available and needed
+                if cfg.evaluation.tasks.regress:
+                    regression_key = cfg.training.regression.label_key
+                    if regression_key in samples[0]:
+                        # FIX: Use the entire cell type ratio vector, not just the first element
+                        reg_labels = torch.tensor([s[regression_key] for s in samples])
+                        tensor_datasets[donor] = TensorDataset(gex_embeds, labels, reg_labels)
+                    else:
+                        # Create dummy regression labels
+                        reg_labels = torch.zeros(len(samples), 10)  # 10 cell types
+                        tensor_datasets[donor] = TensorDataset(gex_embeds, labels, reg_labels)
+                else:
+                    tensor_datasets[donor] = TensorDataset(gex_embeds, labels)
+
+            else:
+                raise ValueError(f"Invalid modality: {modality}")
+
+        except Exception as e:
+            print(f"\n[ERROR] Failed to convert donor {donor} to TensorDataset.")
+            print(f"  - Example label: {samples[0].get(label_key)}")
+            raise e
+
+    # Validate consistency of embedding dimensions
+    if tensor_datasets:
+        first_tensor = next(iter(tensor_datasets.values()))
+        expected_dim = first_tensor.tensors[0].shape[1]
+        print(f"\nValidating embedding dimensions (expected dim: {expected_dim})")
+        for donor, ds in tensor_datasets.items():
+            curr_dim = ds.tensors[0].shape[1]
+            print(f"  - {donor}: {curr_dim}")
+            if curr_dim != expected_dim:
+                raise ValueError(
+                    f"Inconsistent embedding dimensions:\n"
+                    f"Expected: {expected_dim}, Got: {curr_dim} for donor {donor}"
+                )
+
+    print(f"\n✅ Successfully loaded data for {len(tensor_datasets)} donors:")
     for donor, ds in tensor_datasets.items():
         print(f"  - {donor}: {len(ds)} samples")
-    
+
     return tensor_datasets
 
 
@@ -160,115 +243,243 @@ def build_concat_dataset(donors: List[str], all_datasets: Dict[str, TensorDatase
     return ConcatDataset(datasets)
 
 
-def run_classification(cfg: DictConfig, donor_splits, all_datasets):
-    print("Starting classification...")
+def compute_random_baseline(train_labels):
+    """Compute random baseline based on class distribution."""
+    unique, counts = np.unique(train_labels, return_counts=True)
+    probs = counts / len(train_labels)
+    random_acc = np.sum(probs ** 2)  # If we always predict most common class
+    return {
+        'random_accuracy': random_acc,
+        'random_f1_macro': 1.0 / len(unique)  # For balanced F1
+    }
+
+def run_classification(cfg: DictConfig, test_datasets: Dict[str, TensorDataset]) -> Dict[str, float]:
+    print("\n=== Running Classification Evaluation ===")
     task_type = "classification"
-    all_metrics = []
-    donor_results = {}
-
-    for i, (train_donors, test_donor) in enumerate(donor_splits):
-        test_name = test_donor[0]
-        print(f"[{i+1}/{len(donor_splits)}] ➔ Test donor: {test_name}")
-        train_data = build_concat_dataset(train_donors, all_datasets)
-        test_data = build_concat_dataset(test_donor, all_datasets)
-
-        train_samples = [train_data[i] for i in range(len(train_data))]
-        test_samples = [test_data[i] for i in range(len(test_data))]
-
-        if cfg.evaluation.modality == "multimodal":
-            train_img = torch.stack([s[0] for s in train_samples])
-            train_gex = torch.stack([s[1] for s in train_samples])
-            train_y = torch.stack([s[2] for s in train_samples])
-            test_img = torch.stack([s[0] for s in test_samples])
-            test_gex = torch.stack([s[1] for s in test_samples])
-            test_y = torch.stack([s[2] for s in test_samples])
-            X_train = torch.cat([train_img, train_gex], dim=-1)
-            X_test = torch.cat([test_img, test_gex], dim=-1)
-        else:
-            X_train = torch.stack([s[0] for s in train_samples])
-            train_y = torch.stack([s[1] for s in train_samples])
-            X_test = torch.stack([s[0] for s in test_samples])
-            test_y = torch.stack([s[1] for s in test_samples])
-
+    metrics = {}
+    
+    # Determine evaluation strategy
+    eval_strategy = cfg.evaluation.get('strategy', 'test_only')  # Default to test_only for backward compatibility
+    print(f"\nUsing evaluation strategy: {eval_strategy}")
+    
+    # Function to run evaluation for a specific dataset
+    def evaluate_dataset(datasets, pca_dim=None, suffix=""):
+        if eval_strategy == 'test_only':
+            # Use test set for both training and testing
+            print(f"Training and testing on test set to evaluate linear separability{suffix}")
+            test_data = ConcatDataset([ds for ds in datasets.values()])
+            test_samples = [test_data[i] for i in range(len(test_data))]
+            # Handle different tensor structures based on modality and tasks
+            if len(test_samples[0]) == 4:  # multimodal with regression
+                X_img = torch.stack([s[0] for s in test_samples])
+                X_gex = torch.stack([s[1] for s in test_samples])
+                X = torch.cat([X_img, X_gex], dim=1)
+                y = torch.stack([s[2] for s in test_samples])  # classification labels
+            elif len(test_samples[0]) == 3:  # unimodal with regression
+                X = torch.stack([s[0] for s in test_samples])
+                y = torch.stack([s[1] for s in test_samples])  # classification labels
+            else:  # standard case
+                X = torch.stack([s[0] for s in test_samples])
+                y = torch.stack([s[1] for s in test_samples])
+            train_data = X
+            train_labels = y
+            test_data = X
+            test_labels = y
+            
+            # Apply PCA if requested
+            if pca_dim is not None:
+                from sklearn.decomposition import PCA
+                print(f"\nApplying PCA to reduce dimensionality to {pca_dim} components")
+                pca = PCA(n_components=pca_dim)
+                train_data = torch.tensor(pca.fit_transform(train_data.cpu().numpy())).float()
+                test_data = torch.tensor(pca.transform(test_data.cpu().numpy())).float()
+                explained_var = sum(pca.explained_variance_ratio_) * 100
+                print(f"Explained variance with {pca_dim} components: {explained_var:.2f}%")
+            
+            # Per-sample analysis if requested
+            if cfg.evaluation.per_sample:
+                print("\nRunning per-sample analysis...")
+                per_sample_metrics = []
+                for i in range(len(train_data)):
+                    sample_data = train_data[i:i+1]  # Keep batch dimension
+                    sample_label = train_labels[i:i+1]
+                    
+                    # Train and evaluate on single sample
+                    sample_metrics = train_linear_probe(
+                        cfg=cfg,
+                        train_embeddings=sample_data,
+                        train_labels=sample_label,
+                        test_embeddings=sample_data,
+                        test_labels=sample_label,
+                        task_type=task_type,
+                    )
+                    per_sample_metrics.append(sample_metrics)
+                
+                # Compute statistics over per-sample metrics
+                per_sample_summary = {
+                    f'per_sample_accuracy_mean{suffix}': np.mean([m['accuracy'] for m in per_sample_metrics]),
+                    f'per_sample_accuracy_std{suffix}': np.std([m['accuracy'] for m in per_sample_metrics]),
+                    f'per_sample_f1_macro_mean{suffix}': np.mean([m['f1_macro'] for m in per_sample_metrics]),
+                    f'per_sample_f1_macro_std{suffix}': np.std([m['f1_macro'] for m in per_sample_metrics]),
+                }
+                print("\nPer-sample metrics:")
+                for k, v in per_sample_summary.items():
+                    print(f"  {k}: {v:.4f}")
+            
+        else:  # 'train_test_split'
+            print(f"Training on pretrain/finetune data, testing on test set{suffix}")
+            # Load pretrain and finetune data for training
+            train_datasets = {}
+            for split in ['pretrain', 'finetune']:
+                pattern = f"{cfg.evaluation.img_model}_{split}.{cfg.data[f'{split}_split']}"
+                path = get_project_dir() / cfg.data.dataset / "tds" / f"{pattern}.pt"
+                if path.exists():
+                    print(f"Loading {split} data from {path}")
+                    train_datasets.update(torch.load(str(path)))
+            
+            # Prepare training data
+            train_data = ConcatDataset([ds for ds in train_datasets.values()])
+            train_samples = [train_data[i] for i in range(len(train_data))]
+            train_data = torch.stack([s[0] for s in train_samples])
+            train_labels = torch.stack([s[1] for s in train_samples])
+            
+            # Prepare test data
+            test_data = ConcatDataset([ds for ds in datasets.values()])
+            test_samples = [test_data[i] for i in range(len(test_data))]
+            test_data = torch.stack([s[0] for s in test_samples])
+            test_labels = torch.stack([s[1] for s in test_samples])
+        
+        # Add random baseline based on test set distribution
+        baseline = compute_random_baseline(test_labels.numpy())
+        print("\nRandom baseline metrics:")
+        for k, v in baseline.items():
+            print(f"  {k}: {v:.4f}")
+        
+        # Train and evaluate
         metrics = train_linear_probe(
             cfg=cfg,
-            train_embeddings=X_train.float(),
-            train_labels=train_y.float(),
-            test_embeddings=X_test.float(),
-            test_labels=test_y.float(),
+            train_embeddings=train_data.float(),
+            train_labels=train_labels.float(),
+            test_embeddings=test_data.float(),
+            test_labels=test_labels.float(),
             task_type=task_type,
         )
+        
+        # Combine metrics
+        suffix = f"_pca{pca_dim}" if pca_dim else ""
+        summary = {
+            f'classification_accuracy{suffix}': metrics['accuracy'],
+            f'classification_f1_macro{suffix}': metrics['f1_macro'],
+            f'train_accuracy{suffix}': metrics['train_accuracy'],
+            f'train_f1_macro{suffix}': metrics['train_f1_macro'],
+            f'random_accuracy{suffix}': baseline['random_accuracy'],
+            f'random_f1_macro{suffix}': baseline['random_f1_macro']
+        }
+        
+        if pca_dim:
+            summary[f'explained_variance_pca{pca_dim}'] = explained_var
+            
+        if cfg.evaluation.per_sample:
+            summary.update(per_sample_summary)
+        
+        return summary
+    
+    # Run evaluation on original embeddings
+    metrics.update(evaluate_dataset(test_datasets))
+    
+    # Run evaluation with different PCA dimensions
+    for pca_dim in [512, 128, 64, 32]:
+        print(f"\n=== Running Classification with PCA ({pca_dim} components) ===")
+        pca_metrics = evaluate_dataset(test_datasets, pca_dim=pca_dim)
+        metrics.update(pca_metrics)
+    
+    return metrics
 
-        # Aggregate metrics
-        all_metrics.append(metrics)
-        for k, v in metrics.items():
-            if k in {"y_true", "y_pred", "loss_curve", "grad_norms"}:
-                continue
-            donor_results[f"classification_donor_{test_name}_{k}"] = float(v)
-
-    accs = [m['accuracy'] for m in all_metrics]
-    summary = {
-        'classification_accuracy_mean': float(np.mean(accs)),
-        'classification_accuracy_std': float(np.std(accs)),
-    }
-    return {**summary, **donor_results}
-
-def run_regression(cfg: DictConfig, donor_splits: List[Tuple[List[str], List[str]]], all_datasets: Dict[str, TensorDataset]) -> Dict[str, float]:
-    print("Starting regression...")
+def run_regression(cfg: DictConfig, test_datasets: Dict[str, TensorDataset]) -> Dict[str, float]:
+    print("\n=== Running Regression Evaluation ===")
     task_type = "regression"
-    all_metrics = []
-    donor_results = {}
-
-    for i, (train_donors, test_donor) in enumerate(donor_splits):
-        test_name = test_donor[0]
-        print(f"[{i+1}/{len(donor_splits)}] ➔ Test donor: {test_name}")
-        train_data = build_concat_dataset(train_donors, all_datasets)
-        test_data = build_concat_dataset(test_donor, all_datasets)
-
-        train_samples = [train_data[i] for i in range(len(train_data))]
-        test_samples = [test_data[i] for i in range(len(test_data))]
-
-        if cfg.evaluation.modality == "multimodal":
-            train_img = torch.stack([s[0] for s in train_samples])
-            train_gex = torch.stack([s[1] for s in train_samples])
-            train_y = torch.stack([s[2] for s in train_samples])
-            test_img = torch.stack([s[0] for s in test_samples])
-            test_gex = torch.stack([s[1] for s in test_samples])
-            test_y = torch.stack([s[2] for s in test_samples])
-            X_train = torch.cat([train_img, train_gex], dim=-1)
-            X_test = torch.cat([test_img, test_gex], dim=-1)
-        else:
-            X_train = torch.stack([s[0] for s in train_samples])
-            train_y = torch.stack([s[1] for s in train_samples])
-            X_test = torch.stack([s[0] for s in test_samples])
-            test_y = torch.stack([s[1] for s in test_samples])
-
+    
+    # Determine evaluation strategy
+    eval_strategy = cfg.evaluation.get('strategy', 'test_only')  # Default to test_only for backward compatibility
+    print(f"\nUsing evaluation strategy: {eval_strategy}")
+    
+    # Function to run evaluation for a specific dataset
+    def evaluate_dataset(datasets, suffix=""):
+        if eval_strategy == 'test_only':
+            # Use test set for both training and testing
+            print(f"Training and testing on test set to evaluate linear separability{suffix}")
+            test_data = ConcatDataset([ds for ds in datasets.values()])
+            test_samples = [test_data[i] for i in range(len(test_data))]
+            # Handle different tensor structures based on modality and tasks
+            if len(test_samples[0]) == 4:  # multimodal with regression
+                X_img = torch.stack([s[0] for s in test_samples])
+                X_gex = torch.stack([s[1] for s in test_samples])
+                X = torch.cat([X_img, X_gex], dim=1)
+                y = torch.stack([s[3] for s in test_samples])  # regression labels
+            elif len(test_samples[0]) == 3:  # unimodal with regression
+                X = torch.stack([s[0] for s in test_samples])
+                y = torch.stack([s[2] for s in test_samples])  # regression labels
+            else:  # standard case
+                X = torch.stack([s[0] for s in test_samples])
+                y = torch.stack([s[1] for s in test_samples])
+            train_data = X
+            train_labels = y
+            test_data = X
+            test_labels = y
+            
+        else:  # 'train_test_split'
+            print(f"Training on pretrain/finetune data, testing on test set{suffix}")
+            # Load pretrain and finetune data for training
+            train_datasets = {}
+            for split in ['pretrain', 'finetune']:
+                pattern = f"{cfg.evaluation.img_model}_{split}.{cfg.data[f'{split}_split']}"
+                path = get_project_dir() / cfg.data.dataset / "tds" / f"{pattern}.pt"
+                if path.exists():
+                    print(f"Loading {split} data from {path}")
+                    train_datasets.update(torch.load(str(path)))
+            
+            # Prepare training data
+            train_data = ConcatDataset([ds for ds in train_datasets.values()])
+            train_samples = [train_data[i] for i in range(len(train_data))]
+            train_data = torch.stack([s[0] for s in train_samples])
+            train_labels = torch.stack([s[1] for s in train_samples])
+            
+            # Prepare test data
+            test_data = ConcatDataset([ds for ds in datasets.values()])
+            test_samples = [test_data[i] for i in range(len(test_data))]
+            test_data = torch.stack([s[0] for s in test_samples])
+            test_labels = torch.stack([s[1] for s in test_samples])
+        
+        # Train and evaluate
         metrics = train_linear_probe(
             cfg=cfg,
-            train_embeddings=X_train.float(),
-            train_labels=train_y.float(),
-            test_embeddings=X_test.float(),
-            test_labels=test_y.float(),
+            train_embeddings=train_data.float(),
+            train_labels=train_labels.float(),
+            test_embeddings=test_data.float(),
+            test_labels=test_labels.float(),
             task_type=task_type,
         )
-        all_metrics.append(metrics)
-
-        # Include per-donor results
-        for k, v in metrics.items():
-            if k in {"y_true", "y_pred", "loss_curve", "grad_norms"}:
-                continue
-            donor_results[f"regression_donor_{test_name}_{k}"] = float(v)
-
-    # Aggregate metrics
-    arr = np.array([[m['r2'], m['mse']] for m in all_metrics])
-    summary = {
-        'regression_r2_mean': float(np.mean(arr[:, 0])),
-        'regression_r2_std': float(np.std(arr[:, 0])),
-        'regression_mse_mean': float(np.mean(arr[:, 1])),
-        'regression_mse_std': float(np.std(arr[:, 1])),
-    }
-
-    return {**summary, **donor_results}
+        
+        # Return metrics with suffix
+        return {
+            f'regression_r2{suffix}': metrics['r2'],
+            f'regression_mse{suffix}': metrics['mse']
+        }
+    
+    # Run evaluation on original embeddings
+    original_datasets = {k: v for k, v in test_datasets.items() if "_pca" not in k}
+    metrics = evaluate_dataset(original_datasets)
+    
+    # Run evaluation on PCA variants if enabled
+    if hasattr(cfg.evaluation, 'run_pca') and cfg.evaluation.run_pca:
+        for n_components in [1024, 512, 128]:
+            pca_datasets = {k: v for k, v in test_datasets.items() if f"_pca{n_components}" in k}
+            if pca_datasets:  # Only if we have datasets with this number of components
+                print(f"\n=== Running Regression with PCA ({n_components} components) ===")
+                pca_metrics = evaluate_dataset(pca_datasets, f"_pca{n_components}")
+                metrics.update(pca_metrics)
+    
+    return metrics
 
 
 def run_spatial(cfg: DictConfig) -> Dict[str, float]:
@@ -294,6 +505,49 @@ def run_spatial(cfg: DictConfig) -> Dict[str, float]:
         }
 
 
+def run_unimodal_baselines(cfg: DictConfig) -> Dict[str, float]:
+    """Run unimodal baselines for both IMG and GEX encoders."""
+    print("\n=== Running Unimodal Baselines ===")
+    all_metrics = {}
+    
+    # Save original modality
+    original_modality = cfg.evaluation.modality
+    
+    # Test IMG encoder
+    print("\n--- Testing Image Encoder ---")
+    cfg.evaluation.modality = "unimodal_img"
+    tensor_datasets = load_and_filter_datasets(cfg)
+    donor_ids = list(tensor_datasets.keys())
+    donor_splits = get_donor_splits(donor_ids)
+    
+    if cfg.evaluation.tasks.classify:
+        metrics = run_classification(cfg, tensor_datasets)
+        all_metrics.update({f"img_{k}": v for k, v in metrics.items()})
+    
+    if cfg.evaluation.tasks.regress:
+        metrics = run_regression(cfg, tensor_datasets)
+        all_metrics.update({f"img_{k}": v for k, v in metrics.items()})
+    
+    # Test GEX encoder
+    print("\n--- Testing GEX Encoder ---")
+    cfg.evaluation.modality = "unimodal_gex"
+    tensor_datasets = load_and_filter_datasets(cfg)
+    donor_ids = list(tensor_datasets.keys())
+    donor_splits = get_donor_splits(donor_ids)
+    
+    if cfg.evaluation.tasks.classify:
+        metrics = run_classification(cfg, tensor_datasets)
+        all_metrics.update({f"gex_{k}": v for k, v in metrics.items()})
+    
+    if cfg.evaluation.tasks.regress:
+        metrics = run_regression(cfg, tensor_datasets)
+        all_metrics.update({f"gex_{k}": v for k, v in metrics.items()})
+    
+    # Restore original modality
+    cfg.evaluation.modality = original_modality
+    return all_metrics
+
+
 def make_serializable(obj):
     """Recursively convert objects to JSON-serializable types."""
     if isinstance(obj, (DictConfig, ListConfig)):
@@ -312,24 +566,62 @@ def make_serializable(obj):
         return obj
 
 
-def save_results(results_dir: Path, cfg: DictConfig, metrics: dict):
-    def extract_task_results(metrics: dict, task: str) -> dict:
-        task_results = {
-            k: v for k, v in metrics.items()
-            if k.startswith(f"{task}_mean") or k.startswith(f"{task}_std")
+def extract_task_results(metrics: dict, task: str) -> dict:
+    """Extract task-specific results from metrics dictionary."""
+    if task == "classification":
+        return {
+            "accuracy": metrics.get("classification_accuracy", metrics.get("accuracy", None)),
+            "f1_macro": metrics.get("classification_f1_macro", metrics.get("f1_macro", None)),
+            "train_accuracy": metrics.get("train_accuracy", None),
+            "train_f1_macro": metrics.get("train_f1_macro", None),
+            "random_accuracy": metrics.get("random_accuracy", None),
+            "random_f1_macro": metrics.get("random_f1_macro", None),
         }
+    elif task == "regression":
+        return {
+            "r2": metrics.get("regression_r2", metrics.get("r2", None)),
+            "mse": metrics.get("regression_mse", metrics.get("mse", None)),
+        }
+    else:
+        return {}
 
-        per_donor = {}
-        for k, v in metrics.items():
-            if k.startswith(f"{task}_donor_"):
-                parts = k.split("_")
-                donor = parts[2]
-                metric = "_".join(parts[3:])
-                per_donor.setdefault(donor, {})[metric] = v
+def aggregate_metrics(metrics_list, explained_var=None, cumulative_var=None):
+    # metrics_list: list of dicts with keys train_accuracy, train_f1_macro, accuracy, f1_macro, train_r2, train_mse, r2, mse
+    keys = [
+        "train_accuracy", "train_f1_macro", "accuracy", "f1_macro",
+        "train_r2", "train_mse", "r2", "mse"
+    ]
+    arr = {k: [m[k] for m in metrics_list if k in m and m[k] is not None] for k in keys}
+    mean_metrics = {
+        "train_accuracy": np.mean(arr["train_accuracy"]) if arr["train_accuracy"] else None,
+        "train_f1_macro": np.mean(arr["train_f1_macro"]) if arr["train_f1_macro"] else None,
+        "test_accuracy": np.mean(arr["accuracy"]) if arr["accuracy"] else None,
+        "test_f1_macro": np.mean(arr["f1_macro"]) if arr["f1_macro"] else None,
+        "train_r2": np.mean(arr["train_r2"]) if arr["train_r2"] else None,
+        "train_mse": np.mean(arr["train_mse"]) if arr["train_mse"] else None,
+        "test_r2": np.mean(arr["r2"]) if arr["r2"] else None,
+        "test_mse": np.mean(arr["mse"]) if arr["mse"] else None,
+    }
+    std_metrics = {
+        "train_accuracy": np.std(arr["train_accuracy"]) if arr["train_accuracy"] else None,
+        "train_f1_macro": np.std(arr["train_f1_macro"]) if arr["train_f1_macro"] else None,
+        "test_accuracy": np.std(arr["accuracy"]) if arr["accuracy"] else None,
+        "test_f1_macro": np.std(arr["f1_macro"]) if arr["f1_macro"] else None,
+        "train_r2": np.std(arr["train_r2"]) if arr["train_r2"] else None,
+        "train_mse": np.std(arr["train_mse"]) if arr["train_mse"] else None,
+        "test_r2": np.std(arr["r2"]) if arr["r2"] else None,
+        "test_mse": np.std(arr["mse"]) if arr["mse"] else None,
+    }
+    return {
+        "explained_variance": explained_var,
+        "cumulative_explained_variance": cumulative_var,
+        "mean_metrics": mean_metrics,
+        "std_metrics": std_metrics,
+        "per_donor": {"all": metrics_list[0] if len(metrics_list) == 1 else {}}
+    }
 
-        task_results["per_donor"] = per_donor
-        return task_results
-
+def save_results(results_dir: Path, cfg: DictConfig, metrics: dict):
+    """Save evaluation results to JSON."""
     result = {
         "experiment": {
             "aligner": cfg.models.method,
@@ -339,6 +631,10 @@ def save_results(results_dir: Path, cfg: DictConfig, metrics: dict):
             },
             "checkpoint_path": cfg.models.checkpoint_path,
             "dataset": cfg.data.dataset,
+            "modality": cfg.evaluation.modality,
+            "img_model": cfg.evaluation.img_model,
+            "gex_model": cfg.evaluation.gex_model,
+            "evaluation_strategy": "full_test_set",  # Always using full test set for this benchmark
         },
         "data": {
             "test_donors": cfg.data.multimodal.test,
@@ -349,21 +645,142 @@ def save_results(results_dir: Path, cfg: DictConfig, metrics: dict):
             "spatial_neighbor": cfg.training.spatial_neighbor,
         },
         "results": {
-            "classification": extract_task_results(metrics, "classification"),
-            "regression": extract_task_results(metrics, "regression"),
+            "full_dim": {
+                "classification": aggregate_metrics(
+                    [extract_task_results(metrics, "classification")],
+                    metrics.get("explained_variance_pca512"),
+                    metrics.get("explained_variance_pca512")
+                ),
+                "regression": aggregate_metrics(
+                    [extract_task_results(metrics, "regression")],
+                    metrics.get("explained_variance_pca512"),
+                    metrics.get("explained_variance_pca512")
+                ),
+            }
         }
     }
 
-    result = make_serializable(result)
+    # Add PCA results if available
+    for dim in [512, 128, 64, 32]:
+        pca_metrics = {k: v for k, v in metrics.items() if f"pca{dim}" in k}
+        if pca_metrics:
+            result["results"][f"pca_{dim}"] = {
+                "classification": aggregate_metrics(
+                    [extract_task_results(pca_metrics, "classification")],
+                    pca_metrics.get(f"explained_variance_pca{dim}"),
+                    pca_metrics.get(f"explained_variance_pca{dim}")
+                ),
+                "regression": aggregate_metrics(
+                    [extract_task_results(pca_metrics, "regression")],
+                    pca_metrics.get(f"explained_variance_pca{dim}"),
+                    pca_metrics.get(f"explained_variance_pca{dim}")
+                ),
+                "explained_variance": metrics.get(f"explained_variance_pca{dim}", None),
+                "cumulative_explained_variance": metrics.get(f"explained_variance_pca{dim}", None),
+                "top_components": {
+                    f"pc{i+1}": metrics.get(f"pc{i+1}_explained_variance_pca{dim}", None)
+                    for i in range(10)  # Store top 10 components
+                }
+            }
 
-    # --- Print results for inspection ---
+    result = make_serializable(result)
+    
+    # Print results
     print("\n================== FINAL RESULTS ==================\n")
-    print(json.dumps(result, indent=2))
+    print("Evaluation Strategy: Full Test Set")
+    
+    # Print full dimensionality results
+    print("\nFull Dimensionality Results:")
+    
+    # Print classification results
+    if "classification" in result["results"]["full_dim"]:
+        print("  Classification:")
+        class_metrics = result["results"]["full_dim"]["classification"]
+        if class_metrics:
+            accuracy = class_metrics.get("mean_metrics", {}).get("test_accuracy")
+            f1_macro = class_metrics.get("mean_metrics", {}).get("test_f1_macro")
+            train_accuracy = class_metrics.get("mean_metrics", {}).get("train_accuracy")
+            train_f1_macro = class_metrics.get("mean_metrics", {}).get("train_f1_macro")
+            random_accuracy = class_metrics.get("mean_metrics", {}).get("random_accuracy")
+            random_f1_macro = class_metrics.get("mean_metrics", {}).get("random_f1_macro")
+            
+            if accuracy is not None:
+                print(f"    Test Accuracy:  {accuracy:.4f}")
+            if f1_macro is not None:
+                print(f"    Test F1 Macro:  {f1_macro:.4f}")
+            if train_accuracy is not None:
+                print(f"    Train Accuracy: {train_accuracy:.4f}")
+            if train_f1_macro is not None:
+                print(f"    Train F1 Macro: {train_f1_macro:.4f}")
+            if random_accuracy is not None:
+                print(f"    Random Accuracy: {random_accuracy:.4f}")
+            if random_f1_macro is not None:
+                print(f"    Random F1 Macro: {random_f1_macro:.4f}")
+    
+    # Print regression results
+    if "regression" in result["results"]["full_dim"]:
+        print("  Regression:")
+        reg_metrics = result["results"]["full_dim"]["regression"]
+        if reg_metrics:
+            r2 = reg_metrics.get("mean_metrics", {}).get("test_r2")
+            mse = reg_metrics.get("mean_metrics", {}).get("test_mse")
+            
+            if r2 is not None:
+                print(f"    Test R²:        {r2:.4f}")
+            if mse is not None:
+                print(f"    Test MSE:       {mse:.4f}")
+
+    # Print PCA results
+    for dim in [512, 128, 64, 32]:
+        pca_key = f"pca_{dim}"
+        if pca_key in result["results"]:
+            print(f"\nPCA {dim} Components Results:")
+            
+            # Print explained variance
+            explained_var = result["results"][pca_key].get("explained_variance")
+            cumulative_var = result["results"][pca_key].get("cumulative_explained_variance")
+            if explained_var is not None:
+                print(f"  Explained Variance: {explained_var:.2f}%")
+                if cumulative_var is not None:
+                    print(f"  Cumulative Explained Variance: {cumulative_var:.2f}%")
+            
+            # Print classification results
+            if "classification" in result["results"][pca_key]:
+                print("  Classification:")
+                class_metrics = result["results"][pca_key]["classification"]
+                if class_metrics:
+                    accuracy = class_metrics.get("mean_metrics", {}).get("test_accuracy")
+                    f1_macro = class_metrics.get("mean_metrics", {}).get("test_f1_macro")
+                    train_accuracy = class_metrics.get("mean_metrics", {}).get("train_accuracy")
+                    train_f1_macro = class_metrics.get("mean_metrics", {}).get("train_f1_macro")
+                    
+                    if accuracy is not None:
+                        print(f"    Test Accuracy:  {accuracy:.4f}")
+                    if f1_macro is not None:
+                        print(f"    Test F1 Macro:  {f1_macro:.4f}")
+                    if train_accuracy is not None:
+                        print(f"    Train Accuracy: {train_accuracy:.4f}")
+                    if train_f1_macro is not None:
+                        print(f"    Train F1 Macro: {train_f1_macro:.4f}")
+            
+            # Print regression results
+            if "regression" in result["results"][pca_key]:
+                print("  Regression:")
+                reg_metrics = result["results"][pca_key]["regression"]
+                if reg_metrics:
+                    r2 = reg_metrics.get("mean_metrics", {}).get("test_r2")
+                    mse = reg_metrics.get("mean_metrics", {}).get("test_mse")
+                    
+                    if r2 is not None:
+                        print(f"    Test R²:        {r2:.4f}")
+                    if mse is not None:
+                        print(f"    Test MSE:       {mse:.4f}")
+
     print("\n===================================================\n")
 
-    # --- Write to file ---
+    # Save to file
     results_dir.mkdir(parents=True, exist_ok=True)
-    json_path = results_dir / "results.json"
+    json_path = results_dir / "full_test_set_results.json"  # Renamed to indicate strategy
     with open(json_path, 'w') as f:
         json.dump(result, f, indent=2)
     print(f"Results saved to JSON: {json_path}")
@@ -371,6 +788,10 @@ def save_results(results_dir: Path, cfg: DictConfig, metrics: dict):
 
 @hydra.main(config_path='../../../configs', config_name='downstream.yaml')
 def main(cfg: DictConfig):
+    # Add per-sample flag to config if not present
+    if not hasattr(cfg.evaluation, 'per_sample'):
+        cfg.evaluation.per_sample = False
+
     print(f"Starting downstream evaluation")
     print(f"Configuration:")
     print(f"  - Modality: {cfg.evaluation.modality}")
@@ -378,26 +799,46 @@ def main(cfg: DictConfig):
         print(f"  - Alignment method: {cfg.evaluation.align_method}")
     print(f"  - Image model: {cfg.evaluation.img_model}")
     print(f"  - GEX model: {cfg.evaluation.gex_model}")
+    print(f"  - Evaluation strategy: Full test set")
     print(f"Tasks:")
     print(f"  - Classification: {cfg.evaluation.tasks.classify}")
     print(f"  - Regression: {cfg.evaluation.tasks.regress}")
     print(f"  - Spatial: {cfg.evaluation.tasks.spatial}")
+    print(f"  - PCA dimensions: [512, 128, 64, 32]")
 
-    tensor_datasets = load_and_filter_datasets(cfg)
     results_dir = setup_results_dir(cfg)
-    donor_ids = list(tensor_datasets.keys())
-    donor_splits = get_donor_splits(donor_ids)
-
-    print(f"\nRunning {len(donor_splits)} leave-one-donor-out splits")
     metrics = {}
+
+    # Only run unimodal baselines if no specific modality is set
+    if not hasattr(cfg.evaluation, 'modality') and (cfg.evaluation.tasks.classify or cfg.evaluation.tasks.regress):
+        metrics.update(run_unimodal_baselines(cfg))
+
+    # Run the requested modality (multimodal or specific unimodal)
+    tensor_datasets = load_and_filter_datasets(cfg)
 
     if cfg.evaluation.tasks.classify:
         print("\n=== Running Classification Evaluation ===")
-        metrics.update(run_classification(cfg, donor_splits, tensor_datasets))
+        # For each PCA dim and full, collect metrics_list (just one dict for full test set),
+        # then aggregate and store in results dict as above.
+        # At the end, pass this results dict to save_results, and print as in within-donor/LOOCV.
+        for pca_dim in [512, 128, 64, 32]:
+            print(f"\n=== Running Classification with PCA ({pca_dim} components) ===")
+            pca_metrics = run_classification(cfg, tensor_datasets)
+            metrics.update(pca_metrics)
+        metrics.update(run_classification(cfg, tensor_datasets)) # Full test set
 
     if cfg.evaluation.tasks.regress:
         print("\n=== Running Regression Evaluation ===")
-        metrics.update(run_regression(cfg, donor_splits, tensor_datasets))
+        # For each PCA dim and full, collect metrics_list (just one dict for full test set),
+        # then aggregate and store in results dict as above.
+        # At the end, pass this results dict to save_results, and print as in within-donor/LOOCV.
+        for pca_dim in [1024, 512, 128]:
+            pca_datasets = {k: v for k, v in tensor_datasets.items() if f"_pca{pca_dim}" in k}
+            if pca_datasets:
+                print(f"\n=== Running Regression with PCA ({pca_dim} components) ===")
+                pca_metrics = run_regression(cfg, pca_datasets)
+                metrics.update(pca_metrics)
+        metrics.update(run_regression(cfg, tensor_datasets)) # Full test set
 
     if cfg.evaluation.tasks.spatial:
         print("\n=== Running Distance-Based Spatial Neighbor Evaluation ===")
@@ -408,7 +849,8 @@ def main(cfg: DictConfig):
         "modality": cfg.evaluation.modality,
         "img_model": cfg.evaluation.img_model,
         "gex_model": cfg.evaluation.gex_model,
-        "align_method": cfg.evaluation.align_method if cfg.evaluation.modality == "multimodal" else None
+        "align_method": cfg.evaluation.align_method if cfg.evaluation.modality == "multimodal" else None,
+        "per_sample": cfg.evaluation.per_sample
     })
 
     save_results(results_dir, cfg, metrics)

@@ -7,4 +7,4 @@ hidden_dims: [512, 256]
 dropout: 0.1
 use_batchnorm: true
 ema_decay: 0.99
-checkpoint_path: "trained_models/byol/best_byol_lr0.0001_wd0.0001-epoch=46-val_loss=-1.0000.ckpt"
+checkpoint_path: "byol/best_byol_lr0.005_wd1e-05-epoch=31-val_loss=-0.9984.ckpt"

@@ -6,4 +6,4 @@ temperature: 0.07
 img_embed_dim: 1536
 gex_embed_dim: 128
 projection_hidden_dim: 512
-best_checkpoint: "trained_models/simclr/best_simclr_lr0.005_wd0.001-epoch=34-val_loss=6.5268.ckpt"
+checkpoint_path: "simclr/best_simclr_lr1e-05_wd0.001-epoch=20-val_loss=6.8741.ckpt"

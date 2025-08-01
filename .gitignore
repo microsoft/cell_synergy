@@ -182,3 +182,14 @@ data_scaling.egg-info/
 *.wandb
 pyproject.toml
 src/data_scaling/paths.py
+
+# Data files
+*.npy
+*.npz
+*.h5
+*.hdf5
+*.pkl
+*.pickle
+*.pt
+*.pth
+*.safetensors

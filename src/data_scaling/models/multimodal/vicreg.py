@@ -2,18 +2,11 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-class VICRegEncoder(nn.Module):
-    def __init__(self, input_dim, hidden_dim, output_dim):
+
+class LinearVICRegEncoder(nn.Module):
+    def __init__(self, input_dim, output_dim):
         super().__init__()
-        self.encoder = nn.Sequential(
-            nn.Linear(input_dim, hidden_dim),
-            nn.LayerNorm(hidden_dim),
-            nn.GELU(),
-            nn.Linear(hidden_dim, output_dim),
-            nn.LayerNorm(output_dim),
-            nn.GELU(),
-            nn.Linear(output_dim, output_dim)
-        )
+        self.encoder = nn.Linear(input_dim, output_dim)
 
     def forward(self, x):
         return self.encoder(x)
@@ -25,10 +18,9 @@ class VICRegBaseline(nn.Module):
         self.std_coeff = cfg.models.std_coeff
         self.cov_coeff = cfg.models.cov_coeff
         self.projection_dim = cfg.models.projection_dim
-        hidden_dim = cfg.models.projection_hidden_dim
 
-        self.img_encoder = VICRegEncoder(cfg.models.img_embed_dim, hidden_dim, self.projection_dim)
-        self.gex_encoder = VICRegEncoder(cfg.models.gex_embed_dim, hidden_dim, self.projection_dim)
+        self.img_encoder = LinearVICRegEncoder(cfg.models.img_embed_dim, self.projection_dim)
+        self.gex_encoder = LinearVICRegEncoder(cfg.models.gex_embed_dim, self.projection_dim)
 
     def forward(self, img_embed, gex_embed):
         x = self.img_encoder(img_embed)

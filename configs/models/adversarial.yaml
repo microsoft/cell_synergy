@@ -27,4 +27,4 @@ b2: 0.999  # Adam beta2
 periodic_saving: false
 save_freq: 50
 task_type: "classification"  # Used in original for paired sample handling
-checkpoint_path: "trained_models/adversarial/best_adversarial_lr0.005_wd1e-05-epoch=497-val_loss=-60162.9102.ckpt"
+checkpoint_path: ""

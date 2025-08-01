@@ -8,10 +8,10 @@ from torch.utils.data import TensorDataset
 import pickle
 import numpy as np
 from typing import Dict, List
+from data_scaling.paths import PROJECT_DIR
 
 def get_project_dir():
-    raw = os.getenv("AZURE_USER_PROJECT_ROOT", "/mnt/projects/Projects/till_richter/")
-    return Path(os.path.expandvars(raw))
+    return PROJECT_DIR
 
 def donor_from_name(name: str) -> str:
     return name.split("_")[0]
