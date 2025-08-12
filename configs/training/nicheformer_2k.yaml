@@ -1,6 +1,6 @@
 # Training configuration for 2K donors model
 max_epochs: 100
-batch_size: 128
+batch_size: 40
 learning_rate: 3e-4  # Reduced from 5e-4
 seed: 42
 accumulate_grad_batches: 2 

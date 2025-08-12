@@ -1,9 +1,9 @@
 # Training configuration for 4K donors model
 max_epochs: 100
-batch_size: 128
+batch_size: 40  # Match data_scaling effective batch: 40*8*1=320 vs 4*8*10=320
 learning_rate: 4e-4  # Reduced from 6e-4
 seed: 42
-accumulate_grad_batches: 2 
+accumulate_grad_batches: 1  # No accumulation needed with larger per-GPU batch
 weight_decay: 0.001
 val_fraction: 0.1  # Added validation split
 gradient_clip_val: 1.0

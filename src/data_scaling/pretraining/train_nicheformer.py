@@ -26,6 +26,8 @@ import torch.distributed as dist
 import nicheformer.data.datamodules 
 from nicheformer.models._nicheformer import Nicheformer as BaseNicheformer
 from nicheformer.data.datamodules import MerlinDataModuleDistributed
+from torch import optim
+from nicheformer.models._nicheformer import CosineWarmupScheduler
 import socket
 import subprocess
 import uuid
@@ -252,7 +254,7 @@ class MerlinDataModuleDistributedWithValidation(MerlinDataModuleDistributed):
             val_files_devices.append(device_val_paths)
         
         # Create datasets using the function from datamodules
-        def create_datasets_for_device_files(files_devices, columns, path, world_size, dataset_kwargs):
+        def create_datasets_for_device_files(files_devices, columns, path, world_size, dataset_kwargs, is_training=True):
             """Helper to create datasets from distributed file lists."""
             from nicheformer.data.datamodules import merlin_dataset_factory, set_default_kwargs_dataset
             
@@ -261,17 +263,17 @@ class MerlinDataModuleDistributedWithValidation(MerlinDataModuleDistributed):
                 dataset = merlin_dataset_factory(
                     files_devices[device],
                     columns,
-                    set_default_kwargs_dataset(dataset_kwargs, training=True)
+                    set_default_kwargs_dataset(dataset_kwargs, training=is_training)
                 )
                 datasets.append(dataset)
             return datasets
         
         self.train_datasets = create_datasets_for_device_files(
-            train_files_devices, self.columns, self.path, self.world_size, self.dataset_kwargs_train
+            train_files_devices, self.columns, self.path, self.world_size, self.dataset_kwargs_train, is_training=True
         )
         
         self.val_datasets = create_datasets_for_device_files(
-            val_files_devices, self.columns, self.path, self.world_size, self.dataset_kwargs_inference
+            val_files_devices, self.columns, self.path, self.world_size, self.dataset_kwargs_inference, is_training=False
         )
         
         # Test datasets same as validation
@@ -368,23 +370,17 @@ def create_data_module(config: DictConfig, data_dir: Path, world_size: int) -> M
         world_size=world_size,
         val_fraction=val_fraction,  # Use validation fraction from config
         dataloader_kwargs_train={
-            "device": "cpu",
-            "parts_per_chunk": config.data.parts_per_chunk,
-            "drop_last": True,
-            "shuffle": False,  # Some Azure errors with shuffling and job requeueing
+            "device": "cpu",  # Keep data on compute node for Azure
+            "shuffle": True,  # Enable shuffling for better gradient diversity
+            # Remove custom parts_per_chunk, drop_last - use Merlin defaults
         }, 
         dataloader_kwargs_inference={
             "device": "cpu",
-            "parts_per_chunk": config.data.parts_per_chunk,
+            # Use Merlin defaults for inference
         },
-        dataset_kwargs_train={
-            "part_size": f"{config.data.part_size}MB",
-            "buffer_size": config.data.buffer_size,
-        },
-        dataset_kwargs_inference={
-            "part_size": f"{config.data.part_size}MB", 
-            "buffer_size": config.data.buffer_size,
-        }
+        # Remove custom dataset kwargs - use Merlin defaults for better IID sampling
+        dataset_kwargs_train={},
+        dataset_kwargs_inference={}
     )
     
     print(f"After init loader", torch.cuda.memory_summary())
@@ -573,36 +569,9 @@ def setup_callbacks(wandb_logger: WandbLogger, checkpoint_callback: ModelCheckpo
         callbacks.append(LearningRateMonitor(logging_interval="step"))
     return callbacks
 
-def handle_max_steps_parameter(config: DictConfig) -> int:
-    """Robust handling of max_steps parameter - always return a valid integer."""
-    max_steps = config.training.get("max_steps", None)
-    
-    # Handle string/None conversion robustly and ensure we always have an integer
-    if max_steps is None:
-        max_steps = -1  # PyTorch Lightning uses -1 to mean "no limit"
-    elif isinstance(max_steps, str):
-        if max_steps.lower() in ['none', 'null', '']:
-            max_steps = -1  # No limit
-        else:
-            try:
-                max_steps = int(max_steps)
-            except ValueError:
-                print(f"Warning: Invalid max_steps value '{max_steps}', defaulting to no limit (-1)")
-                max_steps = -1
-    elif not isinstance(max_steps, int):
-        print(f"Warning: max_steps is not an integer ({type(max_steps)}), defaulting to no limit (-1)")
-        max_steps = -1
-    
-    # Ensure max_steps is at least -1 (PyTorch Lightning requirement)
-    if max_steps < -1:
-        print(f"Warning: max_steps {max_steps} is less than -1, setting to -1 (no limit)")
-        max_steps = -1
-
-    print(f"Using max_steps = {max_steps} ({'no limit' if max_steps == -1 else 'limited'})")
-    return max_steps
 
 def create_trainer(config: DictConfig, wandb_logger: WandbLogger, callbacks: list[Callback], 
-                  checkpoint_dir: Path, max_steps: int, resume_checkpoint: str = None) -> pl.Trainer:
+                  checkpoint_dir: Path, resume_checkpoint: str = None) -> pl.Trainer:
     """Create and configure the PyTorch Lightning trainer."""
     strategy = FSDPStrategy() 
     gc.collect()
@@ -613,7 +582,6 @@ def create_trainer(config: DictConfig, wandb_logger: WandbLogger, callbacks: lis
         "accelerator": "gpu",
         "devices": config.training.gpus,  # Use config for GPU count
         "max_epochs": config.training.max_epochs,
-        "max_steps": max_steps,  # Use the robustly handled max_steps (always an integer >= -1)
         "log_every_n_steps": 500,
         "strategy": strategy,
         "default_root_dir": str(checkpoint_dir), 
@@ -678,6 +646,25 @@ class FixedNicheformer(BaseNicheformer):
         if 'wandb_id' in checkpoint:
             self.hparams.wandb_id = checkpoint['wandb_id']
             print(f"Loaded WandB ID from checkpoint: {checkpoint['wandb_id']}")
+
+    def configure_optimizers(self):
+        # Same optimizer as upstream
+        optimizer = optim.AdamW(self.parameters(), lr=self.hparams.lr, weight_decay=0.1)
+
+        # Critical: scheduler horizon must be TOTAL STEPS because interval='step'
+        total_steps = getattr(self.trainer, "estimated_stepping_batches", None)
+        if total_steps is None:  # very rare fallback
+            total_steps = int(self.hparams.max_epochs)
+
+        warmup_steps = int(self.hparams.warmup)  # interpret as steps
+
+        scheduler = CosineWarmupScheduler(
+            optimizer=optimizer,
+            warmup=warmup_steps,
+            max_epochs=int(total_steps)  # horizon in steps
+        )
+
+        return [optimizer], [{"scheduler": scheduler, "interval": "step"}]
 
 
 class RankAwareLogger(Callback):
@@ -883,8 +870,7 @@ def train_nicheformer(config: DictConfig) -> str:
     callbacks = setup_callbacks(wandb_logger, checkpoint_callback)
     
     # Trainer setup
-    max_steps = handle_max_steps_parameter(config)
-    trainer = create_trainer(config, wandb_logger, callbacks, checkpoint_dir, max_steps, resume_checkpoint)
+    trainer = create_trainer(config, wandb_logger, callbacks, checkpoint_dir, resume_checkpoint)
     
     # Training - pass the checkpoint path to fit() method instead
     torch.cuda.empty_cache()
@@ -894,7 +880,6 @@ def train_nicheformer(config: DictConfig) -> str:
     print(f"  - Resume from checkpoint: {resume_checkpoint is not None}")
     print(f"  - WandB logging: {wandb_logger is not None}")
     print(f"  - Max epochs: {config.training.max_epochs}")
-    print(f"  - Max steps: {max_steps}")
     
     # Use ckpt_path parameter in fit() method for resuming training
     if resume_checkpoint:
