@@ -3,8 +3,8 @@ max_epochs: 100
 batch_size: 40
 learning_rate: 3e-4  # Reduced from 5e-4
 seed: 42
-accumulate_grad_batches: 2 
-weight_decay: 0.001
+accumulate_grad_batches: 1
+weight_decay: 0.1
 val_fraction: 0.1  # Added validation split
 gradient_clip_val: 1.0
 gradient_clip_algorithm: "value"

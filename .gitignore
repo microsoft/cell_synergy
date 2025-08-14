@@ -193,3 +193,5 @@ src/data_scaling/paths.py
 *.pt
 *.pth
 *.safetensors
+cache/
+figures/

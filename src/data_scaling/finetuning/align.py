@@ -386,21 +386,50 @@ class AlignmentTrainer(pl.LightningModule):
 
 
     def configure_optimizers(self):
-
-        lr = getattr(self.config.training, 'learning_rate', 1e-3)
-        wd = getattr(self.config.training, 'weight_decay', 1e-5)
-        optimizer = torch.optim.AdamW(self.model.parameters(), lr=lr, weight_decay=wd)
-        
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-            optimizer, T_max=self.config.training.get('max_epochs', 100)
-        )
-        
-        return {
-            "optimizer": optimizer,
-            "lr_scheduler": {
-                "scheduler": scheduler,
-                "monitor": "val_loss",  # Monitor validation loss, not training loss
-                "frequency": 1,
-                "interval": "epoch"  # Update scheduler every epoch
+        # Check if this is an adversarial model with its own optimizers
+        if hasattr(self.model, 'optimizer_G') and hasattr(self.model, 'optimizer_D'):
+            # Adversarial models have their own optimizers
+            return {
+                "optimizer": [self.model.optimizer_G, self.model.optimizer_D],
+                "lr_scheduler": {
+                    "scheduler": torch.optim.lr_scheduler.CosineAnnealingLR(
+                        self.model.optimizer_G, T_max=self.config.training.get('max_epochs', 100)
+                    ),
+                    "monitor": "val_loss",
+                    "frequency": 1,
+                    "interval": "epoch"
+                }
             }
-        }
+        else:
+            # Standard configuration for non-adversarial models
+            lr = getattr(self.config.training, 'learning_rate', 1e-3)
+            wd = getattr(self.config.training, 'weight_decay', 1e-5)
+            
+            # Get beta2 parameter for AdamW - use stability settings if configured
+            use_stability_settings = getattr(self.config.training, 'use_stability_settings', False)
+            if use_stability_settings:
+                beta2 = getattr(self.config.training, 'stability_beta2', 0.98)  # Default to 0.98 for stability
+                print(f"   AdamW beta2: 0.999 → {beta2}")
+            else:
+                beta2 = getattr(self.config.training, 'beta2', 0.999)  # Default AdamW beta2
+            
+            optimizer = torch.optim.AdamW(
+                self.model.parameters(), 
+                lr=lr, 
+                weight_decay=wd,
+                betas=(0.9, beta2)  # beta1=0.9, beta2=configurable
+            )
+            
+            scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+                optimizer, T_max=self.config.training.get('max_epochs', 100)
+            )
+            
+            return {
+                "optimizer": optimizer,
+                "lr_scheduler": {
+                    "scheduler": scheduler,
+                    "monitor": "val_loss_smooth",  # Monitor smoothed validation loss for better stability
+                    "frequency": 1,
+                    "interval": "epoch"  # Update scheduler every epoch
+                }
+            }

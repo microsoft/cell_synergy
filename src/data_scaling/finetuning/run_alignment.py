@@ -291,7 +291,7 @@ def main(cfg: DictConfig):
             enable_model_summary=True,
             log_every_n_steps=max(5, min(50, training_batches // 5)),  # Log more frequently: every 5-50 steps, 5 times per epoch max
             # Training stability settings
-            precision="32-true",  # Use full precision for stability, especially with adversarial training
+            precision="bf16-mixed", 
             # Gradient settings for stability
             accumulate_grad_batches=cfg.training.get('accumulate_grad_batches', 1),
             gradient_clip_val=cfg.training.get('gradient_clip_val', 0.5),  # Lower clip value for stability
