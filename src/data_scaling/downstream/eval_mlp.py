@@ -376,7 +376,46 @@ def load_split_data(cfg: DictConfig, split_name, selected_method=None):
 
     print(f"\nLoading dataset from: {split_dir}")
     ds = load_from_disk(str(split_dir))
-    print(f"Loaded {len(ds)} samples from {split_name} split")
+    original_size = len(ds)
+    
+    # 1. Filter out excluded annotation classes
+    if 'annotations' in cfg.data and 'excluded_classes' in cfg.data.annotations:
+        excluded_classes = cfg.data.annotations.excluded_classes
+        print(f"\nFiltering out excluded classes: {excluded_classes}")
+        ds = ds.filter(lambda x: x[class_label_key] not in excluded_classes, 
+                      num_proc=cfg.data.get('num_proc', 4))
+        print(f"After annotation filtering: {len(ds)} samples (removed {original_size - len(ds)} samples)")
+    
+    # 2. Filter out classes that only appear in test set
+    if 'annotations' in cfg.data and cfg.data.annotations.get('exclude_test_only_classes', False):
+        # First, get all unique classes in train set
+        train_ids = cfg.data.multimodal.train
+        train_classes = set(ds.filter(lambda x: x['name'] in train_ids)[class_label_key])
+        
+        # Filter out classes not in train set
+        ds = ds.filter(lambda x: x[class_label_key] in train_classes,
+                      num_proc=cfg.data.get('num_proc', 4))
+        print(f"After test-only class filtering: {len(ds)} samples")
+    
+    # 3. Handle regression task - remove NOMAP from cell type ratios
+    if cfg.evaluation.tasks.regress and 'cell_types' in cfg.data:
+        if 'nomap_index' in cfg.data.cell_types:
+            nomap_idx = cfg.data.cell_types.nomap_index
+            
+            def remove_nomap(example):
+                ratios = list(example[reg_label_key])  # Convert to list for modification
+                # Remove NOMAP and renormalize remaining ratios
+                ratios = ratios[:nomap_idx]  # Exclude NOMAP
+                total = sum(ratios)
+                if total > 0:  # Avoid division by zero
+                    ratios = [r / total for r in ratios]
+                example[reg_label_key] = ratios
+                return example
+            
+            ds = ds.map(remove_nomap, num_proc=cfg.data.get('num_proc', 4))
+            print(f"Removed NOMAP from cell type ratios and renormalized")
+    
+    print(f"Final dataset size: {len(ds)} samples")
 
     return ds
 

@@ -24,6 +24,10 @@ data:
   num_proc: 4
   multimodal:
     test: ${oc.load:data/lung.yaml:multimodal.test}
+  # Add annotation filtering
+  filter_annotations: true
+  excluded_classes: ${oc.load:data/lung.yaml:annotations.excluded_classes}
+  excluded_cell_types: ${oc.load:data/lung.yaml:cell_types.excluded_cell_types}
 
 training:
   classification:

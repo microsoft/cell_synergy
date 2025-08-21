@@ -20,10 +20,8 @@ import string
 import os
 import re
 from pathlib import Path
-from typing import Optional
 import torch.distributed as dist
 # Import from nicheformer package
-import nicheformer.data.datamodules 
 from nicheformer.models._nicheformer import Nicheformer as BaseNicheformer
 from nicheformer.data.datamodules import MerlinDataModuleDistributed
 from torch import optim
@@ -573,7 +571,16 @@ def setup_callbacks(wandb_logger: WandbLogger, checkpoint_callback: ModelCheckpo
 def create_trainer(config: DictConfig, wandb_logger: WandbLogger, callbacks: list[Callback], 
                   checkpoint_dir: Path, resume_checkpoint: str = None) -> pl.Trainer:
     """Create and configure the PyTorch Lightning trainer."""
-    strategy = FSDPStrategy() 
+    # Check if FSDP should be disabled
+    use_fsdp = getattr(config.training, 'use_fsdp', True)  # Default to True for backward compatibility
+    
+    if use_fsdp:
+        strategy = FSDPStrategy()
+        print(f"Using FSDP strategy for distributed training")
+    else:
+        strategy = "ddp"  # Fallback to DDP if FSDP is disabled
+        print(f"FSDP disabled, using DDP strategy instead")
+    
     gc.collect()
     torch.cuda.empty_cache()
     
@@ -651,11 +658,27 @@ class FixedNicheformer(BaseNicheformer):
         # Same optimizer as upstream
         optimizer = optim.AdamW(self.parameters(), lr=self.hparams.lr, weight_decay=0.1)
 
-        # Critical: scheduler horizon must be TOTAL STEPS because interval='step'
-        total_steps = getattr(self.trainer, "estimated_stepping_batches", None)
-        if total_steps is None:  # very rare fallback
-            total_steps = int(self.hparams.max_epochs)
-
+        # Calculate correct total steps based on known data characteristics
+        # 4K donors = 25k steps per epoch at batch size 4
+        # With current batch size, steps per epoch = 25k * (4 / current_batch_size)
+        current_batch_size = self.hparams.batch_size
+        steps_per_epoch_4k = 25000  # Known from your data
+        reference_batch_size = 4     # Batch size when 25k steps was measured
+        
+        # Calculate steps per epoch for current batch size
+        steps_per_epoch = int(steps_per_epoch_4k * (reference_batch_size / current_batch_size))
+        
+        # Use max_epochs from config (100) but we'll stop early
+        max_epochs = getattr(self.hparams, 'max_epochs', 100)
+        
+        # Calculate total steps
+        total_steps = steps_per_epoch * max_epochs
+        
+        print(f"Batch size: {current_batch_size}")
+        print(f"Steps per epoch: {steps_per_epoch}")
+        print(f"Max epochs: {max_epochs}")
+        print(f"Total steps for scheduler: {total_steps}")
+        
         warmup_steps = int(self.hparams.warmup)  # interpret as steps
 
         scheduler = CosineWarmupScheduler(
@@ -664,6 +687,17 @@ class FixedNicheformer(BaseNicheformer):
             max_epochs=int(total_steps)  # horizon in steps
         )
 
+        # Update scheduler configuration to use correct total_steps
+        if hasattr(scheduler, 'max_num_epochs'):
+            # Update the scheduler's max_num_epochs to total_steps
+            scheduler.max_num_epochs = total_steps
+            print(f"Updated scheduler max_num_epochs to total_steps: {total_steps}")
+        elif hasattr(scheduler, 'total_steps'):
+            # Update the scheduler's total_steps
+            scheduler.total_steps = total_steps
+            print(f"Updated scheduler total_steps: {total_steps}")
+
+        print(f"Using step-based scheduler with warmup steps: {warmup_steps}")
         return [optimizer], [{"scheduler": scheduler, "interval": "step"}]
 
 

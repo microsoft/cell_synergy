@@ -4,19 +4,13 @@ batch_size: 40  # Match data_scaling effective batch: 40*8*1=320 vs 4*8*10=320
 learning_rate: 4e-4  # Reduced from 6e-4
 seed: 42
 accumulate_grad_batches: 1  # No accumulation needed with larger per-GPU batch
-weight_decay: 0.001
+weight_decay: 0.1
 val_fraction: 0.1  # Added validation split
 gradient_clip_val: 1.0
 gradient_clip_algorithm: "value"
 max_steps: None
 resume: False
 gpus: [0,1,2,3,4,5,6,7]  # Use all 8 GPUs
-
-# A/H Hardware Stability Settings (optional - add these if training is unstable)
-# use_stability_settings: true
-# stability_lr_factor: 0.5  # Reduce learning rate by half for stability
-# stability_beta2: 0.95    # Lower AdamW beta2 from 0.999 to 0.95 for stability
-# force_fp32: false        # Set to true if bf16-mixed is unstable
 
 # Checkpoint registry for resuming training (populate when checkpoints are available)
 checkpoint_dir: "RevisedFinal_nf_4000donors_lr0_0004_wd0_1"  # e.g., "RevisedFinal_nf_4000donors_lr4e-4_wd0_1"

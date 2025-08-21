@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Dict, List, Tuple
 from omegaconf import DictConfig, ListConfig, OmegaConf
 from torch.utils.data import ConcatDataset, TensorDataset
-from datasets import load_from_disk, load_dataset
+from datasets import load_from_disk, load_dataset, Dataset
 from torch.serialization import add_safe_globals
 
 # Add TensorDataset to safe globals for deserialization
@@ -37,7 +37,7 @@ def load_and_filter_datasets(cfg: DictConfig) -> Dict[str, TensorDataset]:
     scale = cfg.evaluation.scale
     label_key = cfg.training.classification.label_key
 
-    print(f"\nLoading and filtering datasets for:")
+    print("\nLoading and filtering datasets for:")
     print(f"  - Modality: {modality}")
     print(f"  - Image model: {img_model}")
     print(f"  - GEX model: {gex_model}")
@@ -68,6 +68,17 @@ def load_and_filter_datasets(cfg: DictConfig) -> Dict[str, TensorDataset]:
 
     print(f"\nLoading test dataset from: {test_dir}")
     ds: Dataset = load_from_disk(str(test_dir))
+    
+    # Filter out excluded annotation classes - using vectorized operations
+    if 'excluded_classes' in cfg.data:
+        excluded_classes = cfg.data.excluded_classes
+        print(f"\nFiltering out excluded classes: {excluded_classes}")
+        
+        # Fast filtering using HF datasets built-in operations
+        original_size = len(ds)
+        ds = ds.filter(lambda x: x[label_key] not in excluded_classes, 
+                      num_proc=cfg.data.get('num_proc', 4))  # Parallel processing
+        print(f"Filtered dataset size: {len(ds)} (removed {original_size - len(ds)} samples)")
 
     print("\nDataset features:")
     for feature, info in ds.features.items():
@@ -517,8 +528,8 @@ def run_unimodal_baselines(cfg: DictConfig) -> Dict[str, float]:
     print("\n--- Testing Image Encoder ---")
     cfg.evaluation.modality = "unimodal_img"
     tensor_datasets = load_and_filter_datasets(cfg)
-    donor_ids = list(tensor_datasets.keys())
-    donor_splits = get_donor_splits(donor_ids)
+    # donor_ids = list(tensor_datasets.keys())
+    # donor_splits = get_donor_splits(donor_ids)
     
     if cfg.evaluation.tasks.classify:
         metrics = run_classification(cfg, tensor_datasets)
@@ -532,8 +543,8 @@ def run_unimodal_baselines(cfg: DictConfig) -> Dict[str, float]:
     print("\n--- Testing GEX Encoder ---")
     cfg.evaluation.modality = "unimodal_gex"
     tensor_datasets = load_and_filter_datasets(cfg)
-    donor_ids = list(tensor_datasets.keys())
-    donor_splits = get_donor_splits(donor_ids)
+    # donor_ids = list(tensor_datasets.keys())
+    # donor_splits = get_donor_splits(donor_ids)
     
     if cfg.evaluation.tasks.classify:
         metrics = run_classification(cfg, tensor_datasets)
@@ -792,19 +803,19 @@ def main(cfg: DictConfig):
     if not hasattr(cfg.evaluation, 'per_sample'):
         cfg.evaluation.per_sample = False
 
-    print(f"Starting downstream evaluation")
-    print(f"Configuration:")
+    print("Starting downstream evaluation")
+    print("Configuration:")
     print(f"  - Modality: {cfg.evaluation.modality}")
     if cfg.evaluation.modality == "multimodal":
         print(f"  - Alignment method: {cfg.evaluation.align_method}")
     print(f"  - Image model: {cfg.evaluation.img_model}")
     print(f"  - GEX model: {cfg.evaluation.gex_model}")
-    print(f"  - Evaluation strategy: Full test set")
-    print(f"Tasks:")
+    print("  - Evaluation strategy: Full test set")
+    print("Tasks:")
     print(f"  - Classification: {cfg.evaluation.tasks.classify}")
     print(f"  - Regression: {cfg.evaluation.tasks.regress}")
     print(f"  - Spatial: {cfg.evaluation.tasks.spatial}")
-    print(f"  - PCA dimensions: [512, 128, 64, 32]")
+    print("  - PCA dimensions: [512, 128, 64, 32]")
 
     results_dir = setup_results_dir(cfg)
     metrics = {}

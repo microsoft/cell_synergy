@@ -54,3 +54,23 @@ buffer_size: 4000000
 parts_per_chunk: 4
 prealloc_gpu_memory: True
 num_workers: 8
+
+# Annotation filtering
+annotations:
+  excluded_classes: [3, 16]  # Exclude Emphysema (3) and NOANNOT (16)
+  exclude_test_only_classes: true  # Exclude classes that only appear in test set
+
+# Cell type composition filtering
+cell_types:
+  excluded_types: ["NOMAP"]  # Exclude NOMAP from regression
+  nomap_index: 9  # Index of NOMAP in the cell type ratio vector
+
+# Annotation filtering
+annotations:
+  excluded_classes: [3, 16]  # Exclude Emphysema (3) and NOANNOT (16)
+  num_classes: 22  # Effective number of classes after filtering
+
+# Cell type composition filtering
+cell_types:
+  excluded_cell_types: ["NOMAP"]  # Exclude NOMAP from cell type composition
+  # Note: This will be handled during data loading by filtering out samples with NOMAP

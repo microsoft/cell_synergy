@@ -27,7 +27,25 @@ def train_linear_probe(
         output_dim = train_labels.shape[1]
         criterion = nn.MSELoss()
     elif task_type == "classification":
-        output_dim = int(train_labels.max().item()) + 1
+        # Handle excluded classes by using actual max label + 1
+        # This ensures the model output dimension matches the filtered dataset
+        max_label = int(train_labels.max().item())
+        output_dim = max_label + 1
+        
+        # Validate that we don't have gaps in class indices
+        unique_labels = sorted(torch.unique(train_labels).tolist())
+        if verbose:
+            print(f"  - Unique training labels: {unique_labels}")
+            print(f"  - Max label: {max_label}")
+            print(f"  - Output dimension: {output_dim}")
+            
+            # Check for potential gaps in class indices
+            expected_labels = list(range(output_dim))
+            missing_labels = set(expected_labels) - set(unique_labels)
+            if missing_labels:
+                print(f"  - Warning: Missing label indices: {missing_labels}")
+                print(f"  - This suggests some classes were filtered out")
+        
         criterion = nn.CrossEntropyLoss()
     else:
         raise ValueError(f"Unknown task_type: {task_type}")
