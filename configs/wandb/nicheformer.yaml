@@ -1,4 +1,4 @@
-group: "nicheformer"  # Can be overridden based on subset
+group: "hpc"  # Can be overridden based on subset
 project: "data_scaling"
 entity: "till-richter"
 mode: online  # 'online', 'offline', or 'disabled'

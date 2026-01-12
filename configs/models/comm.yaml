@@ -8,6 +8,7 @@ n_layers: 1     # Number of transformer layers
 fusion: "x-attn" # Fusion strategy (concat or x-attn)
 pool: "mean"     # Pooling strategy (cls or mean)
 img_embed_dim: 1536
-gex_embed_dim: 128
+gex_embed_dim: 512
 temperature: 0.07
-checkpoint_path: "trained_models/comm/lightning_lung_L_lr0.0001_wd1e-05_seed42.ckpt"
+checkpoint_split: "preL"
+

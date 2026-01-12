@@ -1,6 +1,6 @@
 method: "cca"            # Method name for the model
-img_embed_dim: 1024         # Input dimension for image embeddings
-gex_embed_dim: 128          # Input dimension for gene expression embeddings
+img_embed_dim: 1536         # Input dimension for image embeddings
+gex_embed_dim: 512          # Input dimension for gene expression embeddings
 projection_dim: 256         # Output dimension of the shared latent space
 hidden_dims: [512, 256]     # Hidden layers for each modality's encoder
 dropout: 0.1                # Dropout rate
@@ -8,4 +8,4 @@ use_batchnorm: true         # Whether to use batch normalization
 activation: "sigmoid"       # Activation function for the encoder
 use_all_singular_values: false  # Whether to use all singular values in DCCA
 projection_hidden_dim: 512
-checkpoint_path: "cca/model_lung_L_lr0.001_wd1e-05_seed42.pt"
+checkpoint_split: "preL"

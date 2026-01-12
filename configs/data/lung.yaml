@@ -59,18 +59,12 @@ num_workers: 8
 annotations:
   excluded_classes: [3, 16]  # Exclude Emphysema (3) and NOANNOT (16)
   exclude_test_only_classes: true  # Exclude classes that only appear in test set
-
-# Cell type composition filtering
-cell_types:
-  excluded_types: ["NOMAP"]  # Exclude NOMAP from regression
-  nomap_index: 9  # Index of NOMAP in the cell type ratio vector
-
-# Annotation filtering
-annotations:
-  excluded_classes: [3, 16]  # Exclude Emphysema (3) and NOANNOT (16)
   num_classes: 22  # Effective number of classes after filtering
 
 # Cell type composition filtering
 cell_types:
-  excluded_cell_types: ["NOMAP"]  # Exclude NOMAP from cell type composition
-  # Note: This will be handled during data loading by filtering out samples with NOMAP
+  nomap_index: 9  # Index of NOMAP in the cell type ratio vector
+  num_classes: 10  # Total number of cell type classes (including NOMAP)
+
+img_embed_key: "img_uni_pool"  # UNI2-h 1536D embeddings (correct for 200M model)
+gex_embed_key: "nicheformer_pool"  # 512D embeddings

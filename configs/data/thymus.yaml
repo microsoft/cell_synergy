@@ -1,0 +1,98 @@
+dataset: "thymus"
+dataset_name: "thymus"
+
+# HuggingFace dataset configuration
+hf_datasets:
+  # For alignment training (pre-computed embeddings)
+  alignment: "microsoft/multimodal_img_st"  # Same as lung, verify if thymus-specific exists
+  # For other tasks (original dataset with embeddings)
+  original: "theislab-multimodal-ssl/thymus_embeddings"  # Already has embeddings!
+
+# Sample splits based on Table 3
+# Train: Pediatric samples (12 samples)
+# Validation: Fetal samples (3 samples)
+# Test: Fetal samples (4 samples)
+multimodal:
+  train:
+    L: ['Z1', 'TA11556492', 'TA11486164', 'TA11486162', 'TA11556493', 'TA11556494', 
+        'TA11556496', 'TA11556495', 'WSSS_THYst9518033', 'WSSS_THYst9518030', 
+        'WSSS_THYst9142088', 'WSSS_THYst9142089']
+  pretrain:
+    S: ['Z1', 'TA11556492', 'TA11486164']
+    M: ['Z1', 'TA11556492', 'TA11486164', 'TA11486162', 'TA11556493', 'TA11556494']
+    L: ['Z1', 'TA11556492', 'TA11486164', 'TA11486162', 'TA11556493', 'TA11556494', 
+        'TA11556496', 'TA11556495', 'WSSS_THYst9518033', 'WSSS_THYst9518030']
+  finetune:
+    S: ['WSSS_THYst9142088', 'WSSS_THYst9142089']
+    M: ['TA11556496', 'TA11556495', 'WSSS_THYst9518033', 'WSSS_THYst9518030']
+    L: ['TA11556496', 'TA11556495', 'WSSS_THYst9518033', 'WSSS_THYst9518030', 
+        'WSSS_THYst9142088', 'WSSS_THYst9142089']
+  test: ['WSSS_F_IMMsp11604687', 'WSSS_F_IMMsp11604688', 'WSSS_F_IMMsp11604686', 'WSSS_F_IMMsp11604685']
+  val: ['WSSS_F_IMMsp11604689', 'WSSS_F_IMMsp11765867', 'WSSS_F_IMMsp11765870']
+
+gex_pretrain:
+  1000_donors: 'nf_1000donors'  # Same as lung - verify if thymus-specific needed
+  2000_donors: 'nf_2000donors'
+  4000_donors: 'nf_4000donors'
+  full: 'nf_full'
+
+img_pretrain:
+  500K: 'bioptimus/H-optimus-0'
+  3M: 'paige-ai/Virchow2'
+  100M: 'MahmoodLab/UNI'
+  200M: 'MahmoodLab/UNI2-h'
+  1B: 'prov-gigapath/prov-gigapath'
+
+train_split: "L"  # S, M, or L
+pretrain_split: "L"
+finetune_split: "L"
+test_split: "L"
+stage: "train"  # pretrain, finetune, or test
+gex_train_choice: "full"
+img_train_choice: "200M"
+
+# HuggingFace dataset paths for alignment training
+hf_dataset_paths:
+  S: "thymus_hf"
+  M: "thymus_hf"  
+  L: "thymus_hf"
+
+part_size: 256
+buffer_size: 4000000
+parts_per_chunk: 4
+prealloc_gpu_memory: True
+num_workers: 8
+
+# Annotation filtering
+# VERIFIED: 11 classes including 'unassigned' (index 10)
+# Classes: Capsular (0), Cortical CMJ (1), Cortical level 1-3 (2-4), Medullar CMJ (5),
+#   Medullar level 1-3 (6-8), Sub-Capsular (9), unassigned (10)
+# 'unassigned' is a PLACEHOLDER class (like NOANNOT in lung/breast) - should be excluded
+annotations:
+  excluded_classes: [10]  # Exclude 'unassigned' (index 10) - placeholder class, same category as NOANNOT
+  exclude_test_only_classes: true  # Exclude classes that only appear in test set
+  num_classes: 10  # Effective number of classes after excluding 'unassigned'
+  unassigned_index: 10  # Verified from dataset
+
+# Cell type composition filtering
+# CRITICAL: Thymus is SPOT-BASED (Visium), not cell-based (Xenium)
+# NO cell_type or cell_type_ratio features available
+# Cannot do cell type composition tasks
+cell_types:
+  nomap_index: null  # N/A - no cell types in spot-based data
+  num_classes: null  # N/A - no cell types in spot-based data
+  is_spot_based: true  # Flag to indicate spot-based data
+
+img_embed_key: "img_uni_pool"  # UNI2-h 1536D embeddings
+gex_embed_key: "nicheformer_pool"  # VERIFIED: 512 dimensions, available in dataset
+# Note: Image embedding is 1536D (UNI2-h), GEX embedding is 512D
+# Gene expression shape: (1, 2000) - likely PCA-reduced from Visium spots
+
+# Image resolution
+# VERIFIED: Extracted from original OME-TIFF images using QuPath
+# Source: EBI BioStudies S-BIAD1257 (https://www.ebi.ac.uk/biostudies/bioimages/studies/S-BIAD1257)
+# Example file: V11J11-099__Z4_FO3_02__B1.ndpi.ome.tif
+# QuPath metadata shows: Pixel width = 0.2271 µm, Pixel height = 0.2271 µm (40x magnification)
+# Resolution is uniform across all samples
+resolution_um_per_pixel: 0.2271  # Verified from original OME-TIFF images (40x magnification)
+

@@ -1,10 +1,15 @@
 method: "byol"
-img_embed_dim: 1024
-gex_embed_dim: 128
+img_embed_dim: 1536
+gex_embed_dim: 512
 projection_dim: 256
 projection_hidden_dim: 512
 hidden_dims: [512, 256]
 dropout: 0.1
 use_batchnorm: true
 ema_decay: 0.99
-checkpoint_path: "byol/best_byol_lr0.005_wd1e-05-epoch=31-val_loss=-0.9984.ckpt"
+checkpoint_path: "byol_preL.ckpt"
+checkpoint_split: "preL"
+
+# Best training config
+# LR 5e-3
+# WD 1e-4

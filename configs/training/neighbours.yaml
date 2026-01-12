@@ -1,4 +1,0 @@
-k_list: [1, 4, 8, 16]
-n_bins: 4
-task_type: classification  # or regression
-target_key: annotation     # or cell_type_ratio

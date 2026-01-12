@@ -1,0 +1,314 @@
+from typing import List, Dict, Tuple, Union
+import torch
+import torch.nn as nn
+from torch.utils.data import DataLoader, TensorDataset
+from sklearn.metrics import accuracy_score, f1_score, r2_score, mean_squared_error
+import numpy as np
+import importlib
+
+
+def train_linear_probe(
+    cfg,
+    train_embeddings: torch.Tensor,
+    train_labels: torch.Tensor,
+    test_embeddings: torch.Tensor,
+    test_labels: torch.Tensor,
+    task_type: str,
+    verbose: bool = True,
+) -> dict:
+    training_cfg = cfg.training[task_type]
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    train_embeddings = train_embeddings.to(device)
+    test_embeddings = test_embeddings.to(device)
+
+    if task_type == "regression":
+        train_labels = train_labels.unsqueeze(1) if train_labels.ndim == 1 else train_labels
+        test_labels = test_labels.unsqueeze(1) if test_labels.ndim == 1 else test_labels
+        output_dim = train_labels.shape[1]
+        criterion = nn.MSELoss()
+    elif task_type == "classification":
+        output_dim = int(train_labels.max().item()) + 1
+        criterion = nn.CrossEntropyLoss()
+    else:
+        raise ValueError(f"Unknown task_type: {task_type}")
+
+    train_labels = train_labels.to(device)
+    test_labels = test_labels.to(device)
+
+    input_dim = train_embeddings.shape[1]  # Use actual input dimension from data
+    batch_size = min(training_cfg.batch_size, 512)
+
+    if verbose:
+        print(f"Training linear probe with batch size {batch_size} on device {device}")
+        print(f"Input dimension: {input_dim}, Output dimension: {output_dim}")
+        print(f"Training samples: {len(train_embeddings)}, Test samples: {len(test_embeddings)}")
+
+    # --- Model ---
+    model = nn.Linear(input_dim, output_dim).to(device)
+
+    # --- Optimizer & Scheduler ---
+    optimizer = torch.optim.SGD(
+        model.parameters(),
+        lr=training_cfg.learning_rate,
+        momentum=0.9,
+        weight_decay=training_cfg.weight_decay,
+    )
+
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+        optimizer,
+        T_max=training_cfg.max_epochs
+    )
+
+    train_dataset = TensorDataset(train_embeddings, train_labels)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+
+    losses = []
+    grad_norms = []
+    train_metrics = []  # Track training metrics
+
+    if verbose:
+        print("Starting training...")
+
+    for epoch in range(training_cfg.max_epochs):
+        model.train()
+        total_loss = 0.0
+        total_grad_norm = 0.0
+        epoch_preds = []
+        epoch_labels = []
+
+        for xb, yb in train_loader:
+            optimizer.zero_grad()
+            preds = model(xb)
+            loss = criterion(preds, yb.long() if task_type == "classification" else yb)
+            loss.backward()
+
+            grad_norm = torch.norm(torch.stack([p.grad.norm() for p in model.parameters() if p.grad is not None]))
+            total_grad_norm += grad_norm.item()
+
+            optimizer.step()
+            total_loss += loss.item()
+
+            # Collect predictions and labels for epoch metrics
+            if task_type == "classification":
+                epoch_preds.extend(preds.argmax(dim=1).cpu().numpy())
+                epoch_labels.extend(yb.cpu().numpy())
+
+        scheduler.step()
+
+        avg_loss = total_loss / len(train_loader)
+        avg_grad_norm = total_grad_norm / len(train_loader)
+        losses.append(avg_loss)
+        grad_norms.append(avg_grad_norm)
+
+        # Compute training metrics for classification
+        if task_type == "classification":
+            train_acc = accuracy_score(epoch_labels, epoch_preds)
+            train_f1 = f1_score(epoch_labels, epoch_preds, average='macro')
+            train_metrics.append({'accuracy': train_acc, 'f1_macro': train_f1})
+
+            if verbose and (epoch + 1) % 10 == 0:
+                print(f"Epoch {epoch+1:3d}: Loss = {avg_loss:.4f}, GradNorm = {avg_grad_norm:.4f}")
+                print(f"           Train Accuracy = {train_acc:.4f}, Train Macro F1 = {train_f1:.4f}")
+        else:
+            if verbose and (epoch + 1) % 10 == 0:
+                print(f"Epoch {epoch+1:3d}: Loss = {avg_loss:.4f}, GradNorm = {avg_grad_norm:.4f}")
+
+    # --- Final evaluation ---
+    model.eval()
+    with torch.no_grad():
+        y_pred = model(test_embeddings).cpu()
+        y_true = test_labels.cpu()
+
+    if task_type == "regression":
+        # Check for NaN values in predictions or true values
+        y_pred_np = y_pred.numpy()
+        y_true_np = y_true.numpy()
+
+        if np.any(np.isnan(y_pred_np)) or np.any(np.isinf(y_pred_np)):
+            print("Warning: NaN or infinite values in predictions, returning default metrics")
+            return {
+                "r2": 0.0,
+                "mse": float('inf'),
+                "y_pred": y_pred_np,
+                "y_true": y_true_np,
+                "loss_curve": losses,
+                "grad_norms": grad_norms,
+            }
+
+        if np.any(np.isnan(y_true_np)) or np.any(np.isinf(y_true_np)):
+            print("Warning: NaN or infinite values in true values, returning default metrics")
+            return {
+                "r2": 0.0,
+                "mse": float('in'),
+                "y_pred": y_pred_np,
+                "y_true": y_true_np,
+                "loss_curve": losses,
+                "grad_norms": grad_norms,
+            }
+
+        # Check if there's variance in the true values
+        if np.std(y_true_np) == 0:
+            print("Warning: No variance in true values, R² calculation not meaningful")
+            return {
+                "r2": 0.0,
+                "mse": mean_squared_error(y_true_np, y_pred_np),
+                "y_pred": y_pred_np,
+                "y_true": y_true_np,
+                "loss_curve": losses,
+                "grad_norms": grad_norms,
+            }
+
+        return {
+            "r2": r2_score(y_true_np, y_pred_np, multioutput='uniform_average'),
+            "mse": mean_squared_error(y_true_np, y_pred_np),
+            "y_pred": y_pred_np,
+            "y_true": y_true_np,
+            "loss_curve": losses,
+            "grad_norms": grad_norms,
+        }
+    else:
+        # Get final training metrics
+        final_train_metrics = train_metrics[-1] if train_metrics else {'accuracy': 0.0, 'f1_macro': 0.0}
+
+        # Compute test metrics
+        test_pred = y_pred.argmax(dim=1).numpy()
+        test_acc = accuracy_score(y_true.numpy(), test_pred)
+        test_f1 = f1_score(y_true.numpy(), test_pred, average="macro")
+
+        print("\nFinal metrics:")
+        print(f"  Train Accuracy: {final_train_metrics['accuracy']:.4f}")
+        print(f"  Train Macro F1: {final_train_metrics['f1_macro']:.4f}")
+        print(f"  Test Accuracy:  {test_acc:.4f}")
+        print(f"  Test Macro F1:  {test_f1:.4f}")
+
+        return {
+            "accuracy": test_acc,
+            "f1_macro": test_f1,
+            "train_accuracy": final_train_metrics['accuracy'],
+            "train_f1_macro": final_train_metrics['f1_macro'],
+            "y_pred": y_pred.numpy(),
+            "y_true": y_true.numpy(),
+            "loss_curve": losses,
+            "grad_norms": grad_norms,
+        }
+
+
+def extract_embeddings_from_fusion_model(
+    cfg,
+    dataset: List[Dict],
+    model_ckpt_path: str,
+    device=None,
+    target_key=None,
+    img_embed_key=None,
+    gex_embed_key=None,
+) -> Tuple[torch.Tensor, torch.Tensor, List[str]]:
+    """
+    Efficient extraction of all embeddings in a single forward pass.
+    """
+    import importlib
+
+    device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    img_embed_key = img_embed_key or cfg.data.img_embed_key
+    gex_embed_key = gex_embed_key or cfg.data.gex_embed_key
+    target_key = target_key or "annotation"
+
+    method = cfg.models.method
+    model_paths = {
+        "simclr": "cell_synergy.models.simclr.SimCLRBaseline",
+        "barlow_twins": "cell_synergy.models.barlowtwins.BarlowTwinsBaseline",
+        "vicreg": "cell_synergy.models.vicreg.VICRegBaseline",
+        "comm": "cell_synergy.models.comm.CoMMBaseline",
+        "adversarial": "cell_synergy.models.adversarial.AdversarialBaseline",
+        "byol": "cell_synergy.models.byol.BYOLBaseline",
+        "dcca": "cell_synergy.models.dcca.DCCABaseline",
+        "dim": "cell_synergy.models.dim.DIMBaseline",
+        "simsiam": "cell_synergy.models.simsiam.SimSiamBaseline",
+    }
+
+    if method not in model_paths:
+        raise ValueError(f"Unknown method: {method}")
+
+    module_path, class_name = model_paths[method].rsplit(".", 1)
+    ModelClass = getattr(importlib.import_module(module_path), class_name)
+
+    model = ModelClass(cfg).to(device)
+    checkpoint = torch.load(model_ckpt_path, map_location=device)
+    state_dict = checkpoint.get("state_dict", checkpoint)
+    model.load_state_dict(state_dict, strict=False)
+    model.eval()
+
+    # Build tensors
+    img_tensor = torch.tensor([s[img_embed_key] for s in dataset], dtype=torch.float32, device=device)
+    gex_tensor = torch.tensor([s[gex_embed_key] for s in dataset], dtype=torch.float32, device=device)
+    names = [s["name"] for s in dataset]
+    targets = torch.tensor(
+        [s[target_key] for s in dataset],
+        dtype=torch.float32 if not isinstance(dataset[0][target_key], int) else torch.long
+    )
+
+    # One forward pass
+    with torch.no_grad():
+        fused = model.get_embeddings(img_tensor, gex_tensor)
+        if isinstance(fused, tuple):
+            fused = torch.cat(fused, dim=-1)
+
+    return fused.cpu(), targets, names
+
+
+def run_loocv_linear_probe(
+    cfg,
+    samples: List[Dict],
+    model_ckpt_path: str,
+    task_type: str,
+    target_key: str,
+    img_embed_key: str,
+    gex_embed_key: str,
+    test_samples: List[str],
+) -> Dict[str, float]:
+    """
+    Run a linear probe on precomputed embeddings.
+
+    Args:
+        cfg: Configuration object.
+        samples: All samples (train + test).
+        model_ckpt_path: Path to the checkpoint for feature extraction.
+        task_type: "classification" or "regression".
+        target_key: Key to extract targets (e.g. 'annotation', 'cell_type_ratio').
+        img_embed_key, gex_embed_key: Keys for embedding extraction.
+        test_samples: List of sample names for the test split.
+
+    Returns:
+        Dictionary of evaluation metrics (F1 or R², etc.).
+    """
+    # Step 1: Extract all embeddings once
+    emb, tgt, names = extract_embeddings_from_fusion_model(
+        cfg,
+        samples,
+        model_ckpt_path,
+        target_key=target_key,
+        img_embed_key=img_embed_key,
+        gex_embed_key=gex_embed_key,
+    )
+
+    # Step 2: Split into train/test tensors
+    name_arr = [n.split('/')[-1] for n in names]
+    test_mask = [n in test_samples for n in name_arr]
+    train_mask = [not m for m in test_mask]
+
+    X_train = emb[train_mask]
+    Y_train = tgt[train_mask]
+    X_test = emb[test_mask]
+    Y_test = tgt[test_mask]
+
+    # Step 3: Run linear probe
+    metrics = train_linear_probe(
+        cfg=cfg,
+        train_embeddings=torch.tensor(X_train, dtype=torch.float32),
+        train_labels=torch.tensor(Y_train, dtype=torch.float32),
+        test_embeddings=torch.tensor(X_test, dtype=torch.float32),
+        test_labels=torch.tensor(Y_test, dtype=torch.float32),
+        task_type=task_type,
+    )
+
+    return metrics

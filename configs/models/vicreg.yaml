@@ -1,11 +1,10 @@
 method: "vicreg"
 gex_encoder: "S"
 img_encoder: "S"
-projection_dim: 256
-projection_hidden_dim: 512
+projection_dim: 256  # Match the checkpoint dimensions
 sim_coeff: 25.0
 std_coeff: 25.0
 cov_coeff: 1.0 
 img_embed_dim: 1536
-gex_embed_dim: 128
-checkpoint_path: "vicreg/best_vicreg_lr0.0005_wd0.001-epoch=58-val_loss=21.6330.ckpt"
+gex_embed_dim: 512
+checkpoint_split: "preL"

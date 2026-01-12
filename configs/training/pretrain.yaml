@@ -1,0 +1,11 @@
+max_epochs: 100
+batch_size: 64
+learning_rate: 2e-4  # Reduced from 1e-3
+seed: 42
+accumulate_grad_batches: 2
+weight_decay: 0.1
+val_fraction: 0.1  # Added validation split
+checkpoint_dir: null  # Will be overridden by specific configs
+wandb_id: null  # Will be overridden by specific configs
+gradient_clip_val: 1.0
+gradient_clip_algorithm: "value"

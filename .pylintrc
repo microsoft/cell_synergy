@@ -1,0 +1,10 @@
+[MASTER]
+max-line-length=100
+
+[MESSAGES CONTROL]
+disable=C0111,R0801,C0411
+
+[FORMAT]
+max-line-length=100
+
+

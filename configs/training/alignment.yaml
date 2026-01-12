@@ -1,11 +1,7 @@
-batch_size: 1024  # Reduced from 2048 to improve validation stability
-num_workers: 4  # Reduced: better for small datasets, avoid overhead
-max_epochs: 500
-early_stopping_patience: 30
-learning_rate: 1e-3  # Keeping original value for hyperparameter sweeping
+batch_size: 32
+num_workers: 4
+max_epochs: 100
+early_stopping_patience: 10
+learning_rate: 1e-4
 weight_decay: 1e-5
-gradient_clip_val: 0.5  # Reduced from 1.0 for better stability
-val_check_interval: 0.5  # Validate twice per epoch for better monitoring
-val_fraction: 0.15  # Reduced validation fraction to ensure larger training sets
-val_loss_smoothing: 0.9  # EMA smoothing factor for validation loss
 seed: 42

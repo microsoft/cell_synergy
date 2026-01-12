@@ -1,6 +1,6 @@
 method: "dim"
-img_embed_dim: 1024
-gex_embed_dim: 128
+img_embed_dim: 1536
+gex_embed_dim: 512
 projection_dim: 256
 hidden_dims: [512, 256]
 dropout: 0.1
@@ -10,3 +10,8 @@ mi_estimator: 'mlp'     # Type of MI estimator: 'dot' or 'bilinear' or 'mlp'
 projection_hidden_dim: 512
 frozen_encoders: false  # Don't freeze encoders - they need to be trainable
 checkpoint_path: "dim/lightning_lung_L_lr1e-05_wd0.0001_seed42.ckpt"
+checkpoint_split: "preL"
+
+# Best training config
+# LR 1e-4
+# WD 1e-3

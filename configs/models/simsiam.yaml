@@ -1,8 +1,8 @@
 method: "simsiam"
-img_embed_dim: 1024
-gex_embed_dim: 128
+img_embed_dim: 1536
+gex_embed_dim: 512
 projection_dim: 256
-hidden_dims: [512, 256]
+hidden_dims: [512, 512]
 dropout: 0.1
 use_batchnorm: true
 projection_hidden_dim: 512

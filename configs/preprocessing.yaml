@@ -1,0 +1,17 @@
+# Configuration for lung dataset preprocessing
+preprocessing:
+  seed: 42
+  chunk_size: 10000  # Number of cells per parquet chunk
+  
+# Data paths (using available data files)
+data:
+  xenium_human_lung:
+    gene_means: "src/data_scaling/data/hf_dataset/xenium_mean_script.npy"
+    cell_data: "src/data_scaling/data/hf_dataset/nicheformer_reference.h5ad"
+    
+# Output structure
+output:
+  processed_dir: "data/xenium_human_lung/processed"
+  merlin_datamodule: "data/xenium_human_lung/processed/merlin_datamodule"
+  subsets: "data/xenium_human_lung/processed/subsets"
+  vocabulary: "data/xenium_human_lung/processed/vocabulary.json"

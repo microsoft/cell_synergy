@@ -3,4 +3,4 @@ gex_encoder: "S"
 img_encoder: "S"
 projection_dim: 256 
 img_embed_dim: 1536
-gex_embed_dim: 128
+gex_embed_dim: 512

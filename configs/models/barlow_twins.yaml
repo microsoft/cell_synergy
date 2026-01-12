@@ -5,6 +5,5 @@ projection_dim: 256
 lambda_param: 0.0051
 scale_loss: 0.025 
 img_embed_dim: 1536
-gex_embed_dim: 128
-projection_hidden_dim: 512
-checkpoint_path: "barlow_twins/best_barlow_twins_lr0.005_wd0.0001-epoch=28-val_loss=111.2091.ckpt"
+gex_embed_dim: 512
+checkpoint_split: "preL"

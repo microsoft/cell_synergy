@@ -2,5 +2,19 @@ defaults:
   - data: lung
   - models: nicheformer
   - training: continued_pretrain
-  - wandb: continue_pretrain
+  - wandb: continued_pretrain
   - _self_ 
+
+# Training configuration for continued training with log-scale subsets
+training:
+  subset_to_train: "100pct"
+  val_ratio: 0.2
+  accumulate_grad_batches: 1
+  gradient_clip_val: 1.0
+  log_every_n_steps: 1000  # Reduced logging frequency
+  val_check_interval: 2
+  precision: "bf16-mixed"
+  learning_rate: 1e-4  # Default learning rate
+  weight_decay: 1e-4   # Default weight decay
+  max_epochs: 20        # Default max epochs
+  batch_size: 128       # Default batch size

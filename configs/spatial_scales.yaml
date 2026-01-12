@@ -1,0 +1,81 @@
+# For the spatial neighbor analysis, we need to define the spatial scales.
+# This is done by defining the distance percentiles and the distance thresholds.
+# The distance percentiles are defined as the percentiles of the pairwise distance distribution.
+# Spatial scale conversion factors and distance percentiles
+# These values come from the original publications and image acquisition parameters
+#
+# Distance percentiles define the boundaries of spatial neighborhood bins.
+# They are optimized to achieve specific target neighbor counts in PER-BIN mode:
+# - Target counts: [8, 16, 24, 32, 40, 48, 56, 64] (per discrete ring)
+# - Per-bin mode: Each bin counts neighbors ONLY in that ring (non-overlapping annuli)
+# - Format: [0, p1, p2, p3, p4, p5, p6, p7, p8] defines 8 distance bins
+# - p_i are percentiles of the pairwise distance distribution (in micrometers)
+# - Percentiles are applied to distance distribution AFTER converting coordinates to micrometers
+#
+# To extend to new datasets:
+# 1. Start with wide exploration (see test_distance_bins_neighbor_counts.py)
+# 2. Iteratively refine each percentile (p1→p2→p3→...→p8) using "laser search"
+# 3. Lock in percentiles that achieve target counts
+# 4. Final polish with simultaneous micro-adjustments to all parameters
+# 5. Target: 0.0 difference from all target neighbor counts
+
+lung:
+  # From PMC10760144: Xenium is always .2125 microns/pixel
+  # Source: scaled_geojson = geojson.scale(origin=(0, 0), xfact = .2125, yfact = .2125)
+  microns_per_pixel: 0.2125
+  
+  # Observed neighbor counts: [8.0, 15.98, 24.00, 32.00, 40.00, 48.05, 56.02, 63.97]
+  # Target neighbor counts: [8, 16, 24, 32, 40, 48, 56, 64] (per-bin mode)
+  # Strategy: Use α=0.25 for balanced progress toward exact targets
+  # Adjustment: p_new = p * (1 - α * (n - t) / t) where n=observed, t=target
+  distance_percentiles: [0, 0.149529, 0.407717, 0.913467, 1.511641, 2.380149, 3.507098, 4.814493, 6.332971]
+  
+  # Distance thresholds in micrometers (from actual distance ranges in test results)
+  # These are the actual radii used for neighbor counting
+  # Bin ranges: 0.0-19.7, 19.7-31.5, 31.5-44.9, 44.9-60.0, 60.0-73.4, 73.4-89.5, 89.5-103.8, 103.8-120.5
+  distance_thresholds_um: [0.0, 19.7, 31.5, 44.9, 60.0, 73.4, 89.5, 103.8, 120.5]
+  
+
+breast:
+  # Breast has VARIABLE resolution per sample (see data/breast.yaml for per-sample values)
+  # Samples: Rep1 (0.364 µm/px), Rep2 (0.2125 µm/px), Sample2 (0.274 µm/px), 
+  #          TENX94-95 (1.0 µm/px), TENX96-97 (0.2125 µm/px)
+  # Distance percentiles are expressed in micrometers (already converted for per-sample scaling)
+  microns_per_pixel: null  # Variable per sample - must use per-sample pixel_sizes_um_per_pixel from data/breast.yaml
+  
+  # Target neighbor counts: [8, 16, 24, 32, 40, 48, 56, 64] (per-bin mode)
+  # Strategy: Adjust percentiles using proportional rule (α=0.25) to fine-tune bins
+  # Adjustment: p_new = p * (1 - α * (n - t) / t) where n=observed, t=target
+  # Note: These percentiles are optimized for per-bin mode (non-overlapping rings)
+  distance_percentiles: [0, 0.025064, 0.078686, 0.152284, 0.252116, 0.37783, 0.54849, 0.730023, 0.938323]
+  
+  # Distance thresholds in micrometers (computed from percentile quantiles, averaged across samples)
+  # Note: Actual thresholds vary per sample due to variable pixel sizes
+  # These are approximate values - will be computed dynamically from actual distance distribution
+  # Updated based on new drastically reduced percentiles to narrow bins
+  distance_thresholds_um: [0.0, 5.0, 15.0, 25.0, 40.0, 60.0, 80.0, 100.0, 120.0]
+  
+  # Performance breakdown (TARGET: [8, 16, 24, 32, 40, 48, 56, 64]):
+  # Previous observed: [78.0, 119.7, 199.1, 285.1, 315.0, 440.1, 458.1, 585.2] - ALL WAY TOO HIGH
+  # Strategy: Drastically reduced percentiles using ratio-based scaling (target/observed * 0.8)
+  # NOTE: These are initial adjustments - will need iterative refinement based on new results
+
+thymus:
+  # VERIFIED: Extracted from original OME-TIFF images using QuPath
+  # Source: EBI BioStudies S-BIAD1257 (https://www.ebi.ac.uk/biostudies/bioimages/studies/S-BIAD1257)
+  # Example file: V11J11-099__Z4_FO3_02__B1.ndpi.ome.tif
+  # QuPath metadata shows: Pixel width = 0.2271 µm, Pixel height = 0.2271 µm (40x magnification)
+  # Resolution is uniform across all samples
+  microns_per_pixel: 0.2271
+  
+  # Observed neighbor counts: [8.1, 15.5, 24.0, 32.0, 40.3, 46.8, 55.4, 64.6]
+  # Target neighbor counts: [8, 16, 24, 32, 40, 48, 56, 64]
+  # Strategy: Use α=0.1 for extremely fine-tuning (almost perfect!)
+  # Adjustment: p_new = p * (1 - α * (n - t) / t) where n=observed, t=target
+  distance_percentiles: [0, 0.300046, 0.864988, 1.86269, 3.020719, 4.734827, 6.5526, 9.103992, 11.936385]
+  
+  # Distance thresholds in micrometers (will be computed from actual distance distribution)
+  # These are approximate - actual values depend on distance distribution
+  # Updated thresholds based on new percentiles
+  distance_thresholds_um: [0.0, 380.0, 600.0, 900.0, 1300.0, 1700.0, 2200.0, 2800.0, 3600.0]
+  

@@ -1,0 +1,203 @@
+dataset: "breast"
+dataset_name: "breast"
+
+# HuggingFace dataset configuration
+hf_datasets:
+  # For alignment training (pre-computed embeddings)
+  alignment: "microsoft/multimodal_img_st"  # Same as lung, verify if breast-specific exists
+  # For other tasks (original dataset with embeddings)
+  original: "theislab-multimodal-ssl/breast_embeddings"  # Already has embeddings!
+
+# Sample splits based on user's notebook
+# NOTE: There's a discrepancy between user's code and Table 3 in manuscript
+# User's code: Train (TENX94-99), Test (Sample2)
+# Table 3: Train (TENX94,96,95,97), Val (Rep1, Rep2), Test (Sample2)
+# Using user's code version for now - VERIFY THIS
+multimodal:
+  train:
+    L: ['TENX94', 'TENX95', 'TENX96', 'TENX97', 'TENX98', 'TENX99']
+  pretrain:
+    S: ['TENX94', 'TENX95']
+    M: ['TENX94', 'TENX95', 'TENX96', 'TENX97']
+    L: ['TENX94', 'TENX95', 'TENX96', 'TENX97', 'TENX98', 'TENX99']
+  finetune:
+    S: ['TENX94', 'TENX95']
+    M: ['TENX94', 'TENX95', 'TENX96', 'TENX97']
+    L: ['TENX94', 'TENX95', 'TENX96', 'TENX97', 'TENX98', 'TENX99']
+  test: ['Sample2']
+
+gex_pretrain:
+  1000_donors: 'nf_1000donors'  # Same as lung - verify if breast-specific needed
+  2000_donors: 'nf_2000donors'
+  4000_donors: 'nf_4000donors'
+  full: 'nf_full'
+
+img_pretrain:
+  500K: 'bioptimus/H-optimus-0'
+  3M: 'paige-ai/Virchow2'
+  100M: 'MahmoodLab/UNI'
+  200M: 'MahmoodLab/UNI2-h'
+  1B: 'prov-gigapath/prov-gigapath'
+
+train_split: "L"  # S, M, or L
+pretrain_split: "L"
+finetune_split: "L"
+test_split: "L"
+stage: "train"  # pretrain, finetune, or test
+gex_train_choice: "full"
+img_train_choice: "200M"
+
+# HuggingFace dataset paths for alignment training
+hf_dataset_paths:
+  S: "breast_hf"
+  M: "breast_hf"  
+  L: "breast_hf"
+
+part_size: 256
+buffer_size: 4000000
+parts_per_chunk: 4
+prealloc_gpu_memory: True
+num_workers: 8
+
+# Annotation filtering
+# VERIFIED: 14 classes including 'NOANNOT' (index 4)
+# Classes: DCIS (0), Flat epithelial atypia (1), Invasive Adenocarcinoma (2),
+#   Lymphocyte Rich Tumor Stroma (3), NOANNOT (4), Necrosis (5),
+#   Normal breast lobules (6), adenosis (7), blood_vessels (8),
+#   columnar cell change (9), duct (10), fat (11), stroma (12), tumor_epithelium (13)
+# 'NOANNOT' is a PLACEHOLDER class (like NOANNOT in lung/unassigned in thymus) - should be excluded
+annotations:
+  excluded_classes: [4]  # VERIFIED: Exclude 'NOANNOT' (index 4) - NOT 13!
+  exclude_test_only_classes: true  # Exclude classes that only appear in test set
+  num_classes: 13  # Effective number of classes after excluding 'NOANNOT' (14 - 1 = 13)
+
+# Cell type composition filtering
+# IMPORTANT: Some samples (TENX94,96,95,97) have NO cell_type annotations
+# This is similar to NOMAP filtering in lung
+# Only Sample2 has cell_type annotations
+cell_types:
+  nomap_index: null  # PLACEHOLDER - verify if NOMAP equivalent exists
+  num_classes: null  # PLACEHOLDER - determine from data
+  # Note: Cell type annotations are missing for 4/7 samples
+
+img_embed_key: "img_uni_pool"  # UNI2-h 1536D embeddings
+gex_embed_key: "nicheformer_pool"
+
+# Image resolution
+# CRITICAL: Each sample in the breast dataset has a UNIQUE pixel scale (µm/px)
+# This makes spatial tasks more complicated as resolution varies between samples
+# Source: 10x Genomics Xenium dataset metadata
+#
+# Dataset metadata fields available (from 10x Xenium metadata CSV):
+#   - dataset_title: Full dataset description
+#   - id: Sample identifier (e.g., TENX94, TENX95, Sample2)
+#   - image_filename: Image file name (e.g., TENX94.tif)
+#   - organ: Tissue type (e.g., "Breast")
+#   - disease_state: Disease status (e.g., "Cancer")
+#   - oncotree_code: Cancer type code (if applicable)
+#   - species: Species (e.g., "Homo sapiens")
+#   - patient: Patient identifier
+#   - st_technology: Spatial technology (e.g., "Xenium")
+#   - data_publication_date: Publication date
+#   - license: License type
+#   - study_link: Link to publication
+#   - download_page_link1: Download link
+#   - inter_spot_dist: Distance between spots
+#   - spot_diameter: Spot diameter
+#   - spots_under_tissue: Number of spots under tissue
+#   - preservation_method: Sample preservation (e.g., "FFPE")
+#   - nb_genes: Number of genes
+#   - treatment_comment: Treatment information
+#   - pixel_size_um_embedded: Actual embedded pixel size in µm (VARIABLE PER SAMPLE)
+#   - pixel_size_um_estimated: Estimated pixel size in µm (VARIABLE PER SAMPLE)
+#   - magnification: Microscope magnification (typically 40x for Xenium)
+#   - fullres_px_width: Full resolution image width in pixels
+#   - fullres_px_height: Full resolution image height in pixels
+#   - tissue: Tissue type
+#   - disease_comment: Disease description
+#   - subseries: Subseries identifier
+#   - hest_version_added: H&E staining version
+#
+# Example resolution values from 10x Xenium datasets (exact values from metadata CSV):
+#   - TENX158 (Skin, Primary Dermal Melanoma):
+#     * pixel_size_um_embedded: 0.2737769309918141
+#     * pixel_size_um_estimated: 0.2737536812559247
+#     * magnification: 40x
+#     * fullres_px_width: 18669, fullres_px_height: 35787
+#     * spots_under_tissue: 2179
+#     * nb_genes: 10017
+#     * preservation_method: FFPE
+#   - TENX149 (Colon, Stage II-A):
+#     * pixel_size_um_embedded: 0.2737768185611484
+#     * pixel_size_um_estimated: 0.2740308880582206
+#     * magnification: 40x
+#     * fullres_px_width: 70534, fullres_px_height: 60222
+#     * spots_under_tissue: 4009
+#     * nb_genes: 541
+#     * preservation_method: FFPE
+#   - TENX148 (Colon):
+#     * pixel_size_um_embedded: 0.2737761889511267
+#     * pixel_size_um_estimated: 0.2737603571635976
+#     * magnification: 40x
+#     * fullres_px_width: 75184, fullres_px_height: 48582
+#     * spots_under_tissue: 4379
+#     * nb_genes: 541
+#     * preservation_method: FFPE
+#   - TENX147 (Colon, Stage IV-A):
+#     * pixel_size_um_embedded: 0.2737753719614869
+#     * pixel_size_um_estimated: 0.2497022099084696
+#     * magnification: 40x
+#     * fullres_px_width: 71082, fullres_px_height: 66226
+#     * spots_under_tissue: 3997
+#     * nb_genes: 541
+#     * preservation_method: FFPE
+#   - NCBI884 (Lung, Control, Patient 27, THD0008):
+#     * pixel_size_um_embedded: 0.2125000159375012
+#     * pixel_size_um_estimated: 0.2125
+#     * magnification: 40x
+#     * fullres_px_width: 25630, fullres_px_height: 28964
+#     * spots_under_tissue: 2504
+#     * nb_genes: 541
+#     * preservation_method: FFPE
+#   - NCBI883 (Lung, Control, Patient 28, THD0011):
+#     * pixel_size_um_embedded: 0.2125000159375012
+#     * pixel_size_um_estimated: 0.2125
+#     * magnification: 40x
+#     * fullres_px_width: 17145, fullres_px_height: 16597
+#     * spots_under_tissue: 1277
+#     * nb_genes: 541
+#     * preservation_method: FFPE
+#
+# IMPORTANT: Each breast sample (TENX94-99, Sample2) has its own unique pixel_size_um_embedded and pixel_size_um_estimated values
+# For spatial tasks: Must load per-sample pixel_size_um_embedded from dataset metadata
+# Cannot assume uniform resolution across samples for spatial distance calculations
+resolution_um_per_pixel: null  # Variable per sample - must use individual sample metadata
+resolution_note: "Each sample has unique resolution - spatial tasks require per-sample resolution handling"
+resolution_metadata_keys: ["pixel_size_um_embedded", "pixel_size_um_estimated", "magnification", "fullres_px_width", "fullres_px_height", "inter_spot_dist", "spot_diameter"]
+
+# Breast sample pixel sizes (µm/px) - from 10x Xenium metadata CSV
+# Actual sample IDs in dataset: Rep1, Rep2, Sample2, TENX94, TENX95, TENX96, TENX97, TENX98, TENX99
+# Mapping to NCBI IDs: Rep1→NCBI785, Rep2→NCBI784, Sample2→NCBI783
+# Values extracted from metadata.csv
+# NOTE: TENX94, TENX95, TENX99 have pixel_size_um_embedded=1.0 (placeholder/incorrect)
+#       but pixel_size_um_estimated=0.2125 (correct, consistent with other Xenium datasets)
+#       Using estimated value (0.2125) for these samples
+pixel_sizes_um_per_pixel:
+  Rep1: 0.3637880037049625    # NCBI785 - "High resolution mapping..." Rep 1
+                              # Study: https://www.nature.com/articles/s41467-023-43458-x
+  Rep2: 0.2125                # NCBI784 - "High resolution mapping..." Rep 2
+                              # Study: https://www.nature.com/articles/s41467-023-43458-x
+  Sample2: 0.2739797412255864 # NCBI783 - "High resolution mapping..." Sample 2
+                              # Study: https://www.nature.com/articles/s41467-023-43458-x
+  TENX94: 0.2125              # "FFPE Human Breast with Pre-designed Panel" - CORRECTED from 1.0 (using estimated value)
+                              # Dataset: https://www.10xgenomics.com/datasets/ffpe-human-breast-with-pre-designed-panel-1-standard
+  TENX95: 0.2125              # "FFPE Human Breast with Pre-designed Panel" - CORRECTED from 1.0 (using estimated value)
+                              # Dataset: https://www.10xgenomics.com/datasets/ffpe-human-breast-with-pre-designed-panel-1-standard
+  TENX96: 0.2125              # "FFPE Human Breast with Custom Add-on Panel"
+                              # Dataset: https://www.10xgenomics.com/datasets/ffpe-human-breast-with-custom-add-on-panel-1-standard
+  TENX97: 0.2125              # "FFPE Human Breast with Custom Add-on Panel"
+                              # Dataset: https://www.10xgenomics.com/datasets/ffpe-human-breast-with-custom-add-on-panel-1-standard
+  TENX98: 0.2125              # "FFPE Human Breast using the Entire Sample Area" - Replicate 2
+                              # Dataset: https://www.10xgenomics.com/datasets/ffpe-human-breast-using-the-entire-sample-area-1-standard
+  TENX99: 0.2125              # "FFPE Human Breast using the Entire Sample Area" - Replicate 1 - CORRECTED from 1.0 (using estimated value)
+                              # Dataset: https://www.10xgenomics.com/datasets/ffpe-human-breast-using-the-entire-sample-area-1-standard

@@ -13,15 +13,27 @@ evaluation:
   strategy: "test_only"  # One of: test_only, pretrain_only, finetune_only, pretrain_finetune
   run_pca: true
   per_sample: false
+  cross_validation: true
+  n_cv_folds: 5  # Number of cross-validation folds for evaluation
+  seed: 42
   tasks:
     classify: true
     regress: true
     spatial: true
 
+spectral_analysis:
+  spectral_gap_threshold: 0.01
+  regularization: 1e-6
+  n_permutations: 100
+  n_eval_samples: 1000
+  use_whitening: true
+
 data:
-  img_embed_key: "img_uni_pool"
+  dataset: "lung"
+  img_embed_key: "img_uni_pool"  # UNI2-h 1536D embeddings (default for 200M model)
   gex_embed_key: "nicheformer_pool"
   num_proc: 4
+  max_samples: null  # Optional: limit dataset size for memory optimization
   multimodal:
     test: ${oc.load:data/lung.yaml:multimodal.test}
   # Add annotation filtering
@@ -37,7 +49,8 @@ training:
     batch_size: 32
     max_epochs: 100
     early_stopping_patience: 10
-
+    seed: 42
+    
   regression:
     label_key: "cell_type_ratio"
     learning_rate: 1e-3
@@ -45,11 +58,15 @@ training:
     batch_size: 32
     max_epochs: 100
     early_stopping_patience: 10
+    seed: 42
 
   spatial_neighbor:
     task_type: "regression"
-    num_bins: 5
+    num_bins: 8  # Extended to support 8, 16, 24, 32, 40, 48, 56, 64 neighbors
     distance_metric: "euclidean"
     summary_strategy: "mean"
     max_neighbor_factor: 10  # Factor to multiply nearest neighbor distance for max range
+    use_knn_bins: false  # If true, use k-nearest-neighbor bins instead of distance bins
+    knn_bins: [0, 5, 15, 35, 65, 100]  # K-NN bin edges: bin0=1-5, bin1=6-15, bin2=16-35, bin3=36-65, bin4=66-100
+    seed: 42
 
