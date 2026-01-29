@@ -3,7 +3,7 @@
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 
-This repository contains the code and data processing pipelines for **"Synergy Matters: Measuring and Scaling Multimodal Alignment in Cell Foundation Models"**.
+This repository contains the code and data processing pipelines for **"Beyond alignment: synergistic integration is required for multimodal cell foundation models"**.
 
 ## Overview
 
@@ -19,7 +19,7 @@ This work investigates how multimodal self-supervised learning (SSL) methods ali
 
 ## Paper Abstract
 
-> The vision of a Virtual Cell (VC) as a computational model that simulates biological function across modalities and scales has become a defining goal in computational biology. Although powerful unimodal foundation models exist, the scarcity of large-scale paired data makes the joint training of multimodal models prohibitive. This scarcity favors Compositional Foundation Models (CFMs): architectures that integrate frozen unimodal experts via a learned interface. Yet, standard evaluations based on downstream performance fail to reveal whether these interfaces truly integrate modalities or merely aggregate redundant signals. Here, we introduce the Synergistic Information Score (SIS), a metric grounded in Partial Information Decomposition (PID) that quantifies the information gain achievable through cross-modal interactions. Extending theoretical results from self-supervised learning, we show that standard alignment objectives on frozen encoders inherently collapse to detecting linear redundancies. SIS reveals that this collapse prevents objectives from capturing the non-linear synergistic states linking morphology and expression.  Benchmarking ten methods on spatial transcriptomics, we demonstrate that while redundancy-dominated tasks are well served by unimodal baselines, complex niche definitions require synergy-aware integration objectives to break the limitations of linear redundancies.  Finally, we reveal a critical efficiency trade-off: while unimodal fine-tuning is highly sample-efficient for standard tasks, discovering synergistic biology requires significantly more paired samples.  These results establish that building VCs requires a fundamental shift from redundancy-reducing alignment to synergy-maximizing integration.
+> The vision of a "virtual cell" as a computational model that simulates biological function across modalities and scales has become a defining goal in computational biology. Although powerful unimodal foundation models exist, the lack of large-scale paired data makes joint training of multimodal approaches prohibitive. This scarcity favors compositional foundation models (CFMs): architectures that fuse frozen unimodal experts via a learned interface. Yet, standard evaluations based on downstream performance fail to reveal whether these fusion interfaces truly integrate modalities or merely aggregate redundant signals. Here, we introduce the Synergistic Information Score (SIS), a metric grounded in partial information decomposition (PID) that quantifies the information gain achievable through cross-modal interactions. Extending theoretical results from self-supervised learning, we show that standard alignment-based fusion objectives on frozen encoders inherently collapse to detecting linear redundancies. SIS reveals that this collapse prevents objectives from capturing the nonlinear synergistic states linking morphology and expression. Benchmarking ten methods on spatial transcriptomics, we demonstrate that while redundancy-dominated tasks are well served by unimodal baselines, complex niche definitions require synergy-aware integration objectives to break the limitations of linear redundancies. Finally, we reveal a critical efficiency trade-off: while unimodal fine-tuning is highly sample-efficient for standard tasks, discovering synergistic biology requires significantly more paired samples. These results establish that building towards a virtual cell will require a fundamental shift from redundancy-reducing alignment to synergy-maximizing integration.
 
 ## Repository Structure
 
@@ -266,6 +266,23 @@ This codebase implements several alignment methods based on original research. W
 - **Barlow Twins**: Based on [Facebook Research Barlow Twins](https://github.com/facebookresearch/barlowtwins) (see `models/barlowtwins.py`)
 - **VICReg**: Based on [Facebook Research VICReg](https://github.com/facebookresearch/vicreg) (see `models/vicreg.py`)
 - **DIM**: Based on [DIM](https://github.com/rdevon/DIM) (see `models/dim.py`)
+
+## Relevant Citation (BibTeX)
+If you use this code or method in your research, please consider citing the following:
+
+```
+@article {hce_classification,
+	author = {Ritcher, Till and Zimmermann, Eric, and Hall, James and Theis, Fabian J. and Raghavan, Srivatsan and Winter, Peter S. and Amini, Ava P. and Crawford, Lorin},
+	title = {Beyond alignment: synergistic integration is required for multimodal cell foundation models},
+	elocation-id = {},
+	year = {2026},
+	doi = {},
+	publisher = {Cold Spring Harbor Laboratory},
+	URL = {},
+	eprint = {},
+	journal = {bioRxiv}
+}
+```
 
 ## License
 
