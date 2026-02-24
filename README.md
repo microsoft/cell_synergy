@@ -2,24 +2,25 @@
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![DOI](https://img.shields.io/badge/DOI-10.64898%2F2026.02.23.707420-blue)](https://doi.org/10.64898/2026.02.23.707420)
 
 This repository contains the code and data processing pipelines for **"Beyond alignment: synergistic integration is required for multimodal cell foundation models"**.
 
 ## Overview
 
-This work investigates how multimodal self-supervised learning (SSL) methods align gene expression (GEX) and histopathology image (IMG) representations in spatial transcriptomics data. We use frozen pretrained encoders (UNI2 for images, Nicheformer for gene expression) and train only the alignment interface. We introduce the **Synergistic Information Score (SIS)** to quantify how well alignment methods capture non-linear interactions between modalities, beyond simple redundancy.
+This work investigates how multimodal self-supervised learning (SSL) methods align gene expression (GEX) and histopathology image (IMG) representations in spatial transcriptomics data. We use frozen pretrained encoders (UNI2 for images, Nicheformer for gene expression) and train only the alignment interface. We introduce the **Synergistic Information Score (SIS)** to quantify how well alignment methods capture nonlinear interactions between modalities, beyond simple redundancy.
 
 ### Key Contributions
 
 1. **Theoretical Framework**: Extends spectral theory to cross-covariance matrices, revealing a "spectral ceiling" that limits linear alignment methods
-2. **SIS Metric**: Novel metric to measure synergistic information capture, distinguishing methods that extract non-linear interactions from those that only capture redundancy
+2. **SIS Metric**: Novel metric to measure synergistic information capture, distinguishing methods that extract nonlinear interactions from those that only capture redundancy
 3. **Comprehensive Benchmarking**: Evaluation of 10 alignment methods (spectral: CCA, DCCA; non-spectral: CoMM, SimCLR, BYOL, SimSiam, Barlow Twins, VICReg, DIM, Concat) across three datasets (lung, breast, thymus)
 4. **Data Scaling Analysis**: Systematic study of how data scale affects multimodal alignment performance
 5. **Spatial Evaluation**: Task-specific evaluation ranging from local redundancy (cell type classification) to long-range spatial organization (neighborhood prediction)
 
 ## Paper Abstract
 
-> The vision of a "virtual cell" as a computational model that simulates biological function across modalities and scales has become a defining goal in computational biology. Although powerful unimodal foundation models exist, the lack of large-scale paired data makes joint training of multimodal approaches prohibitive. This scarcity favors compositional foundation models (CFMs): architectures that fuse frozen unimodal experts via a learned interface. Yet, standard evaluations based on downstream performance fail to reveal whether these fusion interfaces truly integrate modalities or merely aggregate redundant signals. Here, we introduce the Synergistic Information Score (SIS), a metric grounded in partial information decomposition (PID) that quantifies the information gain achievable through cross-modal interactions. Extending theoretical results from self-supervised learning, we show that standard alignment-based fusion objectives on frozen encoders inherently collapse to detecting linear redundancies. SIS reveals that this collapse prevents objectives from capturing the nonlinear synergistic states linking morphology and expression. Benchmarking ten methods on spatial transcriptomics, we demonstrate that while redundancy-dominated tasks are well served by unimodal baselines, complex niche definitions require synergy-aware integration objectives to break the limitations of linear redundancies. Finally, we reveal a critical efficiency trade-off: while unimodal fine-tuning is highly sample-efficient for standard tasks, discovering synergistic biology requires significantly more paired samples. These results establish that building towards a virtual cell will require a fundamental shift from redundancy-reducing alignment to synergy-maximizing integration.
+> The vision of a "virtual cell"---a computational model that simulates biological function across modalities and scales---has become a defining goal in computational biology. While powerful unimodal foundation models exist, the lack of large-scale paired data prohibits the joint training of multimodal approaches. This scarcity favors compositional foundation models (CFMs): architectures that fuse frozen unimodal experts via a learned interface. However, it remains unclear when this multimodal fusion adds task-relevant information beyond the strongest unimodal representation and when it merely aggregates redundant signal. Here, we introduce the Synergistic Information Score (SIS), a metric grounded in partial information decomposition (PID), that quantifies the information gain achievable only through cross-modal interactions. Extending theoretical results from self-supervised learning, we show that standard alignment-based fusion objectives on frozen encoders inherently collapse to detecting linear redundancies, limiting their ability to capture nonlinear synergistic states. This distinction is directly relevant for tasks aiming to link tissue morphology and gene expression. Benchmarking ten fusion methods on spatial transcriptomics datasets, we use SIS to demonstrate that tasks dominated by linear redundancies are sufficiently served by unimodal baselines, whereas complex niche definitions benefit from synergy-aware integration objectives that enable cross-modal interactions beyond linear alignment. Finally, we perform a scaling analysis which highlights that fine-tuning a dominant unimodal expert is the most sample-efficient path for standard tasks, suggesting that the benefits of multimodal frameworks only emerge when tasks depend on information distributed across modalities. Together, these results establish that building towards a virtual cell will require a fundamental shift from alignment objectives that emphasize shared structure to synergy-maximizing integration that preserves and exploits complementary cross-modal signal.
 
 ## Repository Structure
 
@@ -227,13 +228,13 @@ All alignment models are implemented in `src/cell_synergy/models/`:
 The `sis.py` module implements the Synergistic Information Score:
 
 ```
-SIS(Y; z₁, z₂) = (I(Y; z₃) - max(I(Y; z₁), I(Y; z₂))) / max(I(Y; z₁), I(Y; z₂))
+SIS(Y; Z₁, Z₂) = (I(Y; Z₃) - max(I(Y; Z₁), I(Y; Z₂))) / max(I(Y; Z₁), I(Y; Z₂))
 ```
 
 Where:
-- `z₁, z₂`: Unimodal representations (IMG and GEX)
-- `z₃`: Multimodal representation
-- `I(Y; z)`: Mutual information approximated by performance metrics (F1 Macro, R²)
+- `Z₁, Z₂`: Unimodal representations (IMG and GEX)
+- `Z₃`: Multimodal representation
+- `I(Y; Z)`: Mutual information approximated by performance metrics (F1 Macro, R²)
 
 ### Datasets
 
@@ -274,19 +275,19 @@ If you use this code or method in your research, please consider citing the foll
 @article {hce_classification,
 	author = {Ritcher, Till and Zimmermann, Eric, and Hall, James and Theis, Fabian J. and Raghavan, Srivatsan and Winter, Peter S. and Amini, Ava P. and Crawford, Lorin},
 	title = {Beyond alignment: synergistic integration is required for multimodal cell foundation models},
-	elocation-id = {},
+	elocation-id = {2026.02.23.707420},
 	year = {2026},
-	doi = {},
+	doi = {10.64898/2026.02.23.707420},
 	publisher = {Cold Spring Harbor Laboratory},
-	URL = {},
-	eprint = {},
+	URL = {https://www.biorxiv.org/content/10.64898/2026.02.23.707420v1},
+	eprint = {https://www.biorxiv.org/content/10.64898/2026.02.23.707420v1.full.pdf},
 	journal = {bioRxiv}
 }
 ```
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License.
 
 ## Contact
 
@@ -295,3 +296,25 @@ For questions or issues, please open an issue on GitHub or contact the authors.
 ## Acknowledgments
 
 We thank the developers of the original alignment methods and the spatial transcriptomics community for making datasets publicly available.
+
+## Contributing
+
+This project welcomes contributions and suggestions.  Most contributions require you to agree to a
+Contributor License Agreement (CLA) declaring that you have the right to, and actually do, grant us
+the rights to use your contribution. For details, visit https://cla.opensource.microsoft.com.
+
+When you submit a pull request, a CLA bot will automatically determine whether you need to provide
+a CLA and decorate the PR appropriately (e.g., status check, comment). Simply follow the instructions
+provided by the bot. You will only need to do this once across all repos using our CLA.
+
+This project has adopted the [Microsoft Open Source Code of Conduct](https://opensource.microsoft.com/codeofconduct/).
+For more information see the [Code of Conduct FAQ](https://opensource.microsoft.com/codeofconduct/faq/) or
+contact [opencode@microsoft.com](mailto:opencode@microsoft.com) with any additional questions or comments.
+
+## Trademarks
+
+This project may contain trademarks or logos for projects, products, or services. Authorized use of Microsoft 
+trademarks or logos is subject to and must follow 
+[Microsoft's Trademark & Brand Guidelines](https://www.microsoft.com/en-us/legal/intellectualproperty/trademarks/usage/general).
+Use of Microsoft trademarks or logos in modified versions of this project must not cause confusion or imply Microsoft sponsorship.
+Any use of third-party trademarks or logos are subject to those third-party's policies.
