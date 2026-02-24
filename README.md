@@ -272,7 +272,7 @@ This codebase implements several alignment methods based on original research. W
 If you use this code or method in your research, please consider citing the following:
 
 ```
-@article {hce_classification,
+@article {cell_synergy,
 	author = {Ritcher, Till and Zimmermann, Eric, and Hall, James and Theis, Fabian J. and Raghavan, Srivatsan and Winter, Peter S. and Amini, Ava P. and Crawford, Lorin},
 	title = {Beyond alignment: synergistic integration is required for multimodal cell foundation models},
 	elocation-id = {2026.02.23.707420},
