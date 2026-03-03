@@ -2,7 +2,7 @@
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
-[![DOI](https://img.shields.io/badge/DOI-10.64898%2F2026.02.23.707420-blue)](https://doi.org/10.64898/2026.02.23.707420)
+[![bioRxiv](https://img.shields.io/badge/bioRxiv-Preprint-orange)](https://www.biorxiv.org/content/10.64898/2026.02.23.707420v3)
 
 This repository contains the code and data processing pipelines for **"Beyond alignment: synergistic integration is required for multimodal cell foundation models"**.
 
@@ -279,8 +279,8 @@ If you use this code or method in your research, please consider citing the foll
 	year = {2026},
 	doi = {10.64898/2026.02.23.707420},
 	publisher = {Cold Spring Harbor Laboratory},
-	URL = {https://www.biorxiv.org/content/10.64898/2026.02.23.707420v1},
-	eprint = {https://www.biorxiv.org/content/10.64898/2026.02.23.707420v1.full.pdf},
+	URL = {https://www.biorxiv.org/content/10.64898/2026.02.23.707420v3},
+	eprint = {https://www.biorxiv.org/content/10.64898/2026.02.23.707420v3.full.pdf},
 	journal = {bioRxiv}
 }
 ```
